@@ -1,6 +1,5 @@
 -- Game director: moves the game through RTS -> FakeVictory -> Horror -> TrueVictory
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
@@ -12,27 +11,17 @@ local entitySpawn = workspace:WaitForChild("EntitySpawn")
 local player = Players.LocalPlayer
 
 local ORBS_REQUIRED = 5
-local FAKE_VICTORY_SECONDS = 4
+local FAKE_VICTORY_SECONDS = 5
 
 local currentOrbs = 0
 
-local function GiveFlashlight(character)
-	local head = character:WaitForChild("Head", 5)
-	if head and not head:FindFirstChild("HorrorFlashlight") then
-		local flashlight = Instance.new("SpotLight")
-		flashlight.Name = "HorrorFlashlight"
-		flashlight.Range = 60
-		flashlight.Angle = 45
-		flashlight.Brightness = 4
-		flashlight.Face = Enum.NormalId.Front
-		flashlight.Parent = head
-	end
-end
-
+-- Stand on the spawn pad facing the maze and the old core
 local function TeleportToSpawn(character)
 	local root = character:WaitForChild("HumanoidRootPart", 5)
 	if root then
-		root.CFrame = entitySpawn.CFrame + Vector3.new(0, 5, 0)
+		local standAt = entitySpawn.Position + Vector3.new(0, 3, 0)
+		local lookAt = Vector3.new(core.Position.X, standAt.Y, core.Position.Z)
+		root.CFrame = CFrame.lookAt(standAt, lookAt)
 	end
 end
 
@@ -61,6 +50,14 @@ end)
 -- FAKE VICTORY: short pause before the horror starts
 -------------------------------------------------------------------------
 GameState.OnPhase(Phases.FakeVictory, function()
+	-- The core is "destroyed": hide it and its glow
+	core.Transparency = 1
+	core.CanCollide = false
+	local coreGlow = core:FindFirstChild("CoreGlow")
+	if coreGlow then
+		coreGlow.Enabled = false
+	end
+
 	local character = player.Character or player.CharacterAdded:Wait()
 	TeleportToSpawn(character)
 
@@ -72,15 +69,11 @@ GameState.OnPhase(Phases.FakeVictory, function()
 end)
 
 -------------------------------------------------------------------------
--- HORROR: darkness, flashlight, escape pad at the core
+-- HORROR: escape pad at the core (lighting lives in PhaseEffects, flashlight in Flashlight)
 -------------------------------------------------------------------------
 GameState.OnPhase(Phases.Horror, function()
-	Lighting.Ambient = Color3.fromRGB(0, 0, 0)
-	Lighting.OutdoorAmbient = Color3.fromRGB(0, 0, 0)
-	Lighting.Brightness = 0
-	Lighting.ClockTime = 0
-
 	-- Escape pad at the core (step 6 replaces this with a separate EscapeZone)
+	core.Transparency = 0
 	core.Size = Vector3.new(20, 1, 20)
 	core.Position = Vector3.new(core.Position.X, 0.5, core.Position.Z)
 	core.BrickColor = BrickColor.new("Lime green")
@@ -91,15 +84,11 @@ GameState.OnPhase(Phases.Horror, function()
 	escapeLight.Range = 40
 	escapeLight.Brightness = 3
 	escapeLight.Parent = core
-
-	local character = player.Character or player.CharacterAdded:Wait()
-	GiveFlashlight(character)
 end)
 
--- Respawning during the horror keeps the flashlight and starts again at the spawn pad
+-- Respawning during the horror starts again at the spawn pad
 player.CharacterAdded:Connect(function(newCharacter)
 	if GameState.Is(Phases.Horror) then
-		GiveFlashlight(newCharacter)
 		TeleportToSpawn(newCharacter)
 	end
 end)

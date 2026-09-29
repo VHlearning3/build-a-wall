@@ -34,6 +34,13 @@ local function FollowCharacter(character)
 	if humanoid then
 		camera.CameraSubject = humanoid
 	end
+
+	-- Look straight ahead instead of keeping the top-down RTS angle
+	local head = character:FindFirstChild("Head")
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if head and root then
+		camera.CFrame = CFrame.lookAt(head.Position, head.Position + root.CFrame.LookVector)
+	end
 end
 
 -- Pääsilmukka RTS-kameran liikuttamiseen
@@ -67,8 +74,9 @@ RunService.RenderStepped:Connect(UpdateRTSCamera)
 -- Fake victory: snap into first person, still frozen
 GameState.OnPhase(Phases.FakeVictory, function()
 	local character = player.Character or player.CharacterAdded:Wait()
-	FollowCharacter(character)
 	ApplyMovement(character)
+	-- Deferred so GameManager has already teleported the player onto the spawn pad
+	task.defer(FollowCharacter, character)
 end)
 
 -- Horror: first person and free to move
