@@ -1,0 +1,13 @@
+# Project place file
+/build-a-wall.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+sourcemap.json
+
+# Roblox place files (source lives in src/)
+*.rbxl
+*.rbxl.lock
+*.rbxlx
