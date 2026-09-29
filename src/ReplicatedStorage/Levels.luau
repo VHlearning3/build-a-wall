@@ -2,6 +2,8 @@
 -- the orbs fly out of it towards +Z first, so the player has to bounce them back to the cores.
 -- ESCAPE_POSITION is where the escape zone appears in the horror (a core position) and where
 -- the Hunter has its lair (a little further away from the spawn).
+-- Optional: HUNTERS (roles, default {"chaser"}), BATTERY (the flashlight runs down, pick up batteries),
+-- HORROR_FOG (fog density in the horror, default 0.75).
 return {
 	{
 		NAME = "The Grid",
@@ -97,5 +99,65 @@ return {
 		BUMPERS = {},
 		HUNTER_LAIR_WAIT = 1,
 		HUNTER_STALKS = false, -- Straight to the chase
+	},
+	{
+		NAME = "Blackout",
+		DESCRIPTION = "Dark rooms. Your flashlight battery runs out fast.",
+		HALF_X = 72,
+		HALF_Z = 110,
+		SPAWN_POSITION = Vector3.new(0, 0, 88),
+		CORES = {{position = Vector3.new(-40, 0, -88), hits = 5}},
+		ESCAPE_POSITION = Vector3.new(-40, 0, -88),
+		BUDGET = 28,
+		MAZE = {
+			{-72, -20, 50, 52}, -- Gap in the middle-left (-20..0)
+			{0, 72, 50, 52},
+			{-40, -38, 0, 50}, -- Room walls
+			{20, 22, -10, 50},
+			{-72, 40, -40, -38}, -- Gap on the right (40..72)
+			{-10, -8, -110, -60}, -- Wall beside the core
+			{44, 52, 20, 28},
+			{-60, -52, -20, -12},
+		},
+		BUMPERS = {},
+		HUNTER_LAIR_WAIT = 8,
+		HUNTER_STALKS = true,
+		HORROR_FOG = 0.85,
+		-- The flashlight lasts DRAIN_SECONDS from full; each battery gives back REFILL (0..1)
+		BATTERY = {
+			DRAIN_SECONDS = 40,
+			REFILL = 0.45,
+			PICKUPS = {
+				Vector3.new(10, 0, 30),
+				Vector3.new(-55, 0, 20),
+				Vector3.new(50, 0, 0),
+				Vector3.new(60, 0, -60),
+				Vector3.new(-25, 0, -50),
+				Vector3.new(-60, 0, -75),
+			},
+		},
+	},
+	{
+		NAME = "Two Hunters",
+		DESCRIPTION = "One hunts you. One guards the way out.",
+		HALF_X = 72,
+		HALF_Z = 100,
+		SPAWN_POSITION = Vector3.new(0, 0, 80),
+		CORES = {{position = Vector3.new(0, 0, -80), hits = 6}},
+		ESCAPE_POSITION = Vector3.new(0, 0, -80),
+		BUDGET = 30,
+		MAZE = {
+			{-72, -12, 40, 42}, -- Gap in the middle (-12..12)
+			{12, 72, 40, 42},
+			{-50, -48, -30, 40}, -- Long side walls
+			{48, 50, -30, 40},
+			{-30, 30, -20, -18}, -- Middle bar
+			{-72, -20, -50, -48}, -- Gap in the middle (-20..20) before the core
+			{20, 72, -50, -48},
+		},
+		BUMPERS = {},
+		HUNTER_LAIR_WAIT = 4,
+		HUNTER_STALKS = true,
+		HUNTERS = {"chaser", "guard"},
 	},
 }

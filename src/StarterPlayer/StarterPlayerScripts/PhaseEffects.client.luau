@@ -158,7 +158,7 @@ GameState.OnPhase(Phases.Horror, function()
 	Lighting.FogStart = 0
 	Lighting.FogEnd = 45
 	if atmosphere then
-		atmosphere.Density = 0.75
+		atmosphere.Density = ArenaLayout.HORROR_FOG or HORROR_FOG_DENSITY
 		atmosphere.Offset = 0
 		atmosphere.Color = Color3.fromRGB(18, 18, 22)
 		atmosphere.Decay = Color3.fromRGB(8, 8, 10)
@@ -179,7 +179,8 @@ GameState.OnPhase(Phases.Horror, function()
 
 		local distance = (Vector3.new(root.Position.X, 0, root.Position.Z) - escapeCenter).Magnitude
 		local closeness = math.clamp((FOG_CLEAR_START - distance) / (FOG_CLEAR_START - FOG_CLEAR_END), 0, 1)
-		atmosphere.Density = HORROR_FOG_DENSITY + (CLEAR_FOG_DENSITY - HORROR_FOG_DENSITY) * closeness
+		local fog = ArenaLayout.HORROR_FOG or HORROR_FOG_DENSITY
+		atmosphere.Density = fog + (CLEAR_FOG_DENSITY - fog) * closeness
 	end)
 end)
 

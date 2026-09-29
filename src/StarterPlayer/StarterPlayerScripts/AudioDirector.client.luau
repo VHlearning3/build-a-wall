@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local Phases = GameState.Phases
 
 local player = Players.LocalPlayer
@@ -55,13 +56,11 @@ GameState.OnPhase(Phases.Horror, function()
 	heartbeatConnection = RunService.Heartbeat:Connect(function()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		local hunter = workspace:FindFirstChild("Hunter")
-		local hunterRoot = hunter and hunter:FindFirstChild("HumanoidRootPart")
+		local hunterRoot, distance = if root then ArenaLayout.NearestHunter(root.Position) else nil
 		if not root or not hunterRoot then
 			heartbeat.Volume = 0
 			return
 		end
-		local distance = (hunterRoot.Position - root.Position).Magnitude
 		local fear = math.clamp((HEARTBEAT_FAR - distance) / (HEARTBEAT_FAR - HEARTBEAT_NEAR), 0, 1)
 		heartbeat.Volume = fear * 0.9
 		heartbeat.PlaybackSpeed = 0.85 + fear * 0.7

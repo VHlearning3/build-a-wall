@@ -38,14 +38,36 @@ function ArenaLayout.Border()
 	}
 end
 
--- Places no piece may be built on: the spawn pad and every core
+-- Places no piece may be built on: the spawn pad, every core and every battery pickup
 function ArenaLayout.KeepClearSpots()
 	local level = ArenaLayout.Level()
 	local spots = {level.SPAWN_POSITION}
 	for _, core in level.CORES do
 		table.insert(spots, core.position)
 	end
+	if level.BATTERY then
+		for _, pickup in level.BATTERY.PICKUPS do
+			table.insert(spots, pickup)
+		end
+	end
 	return spots
+end
+
+-- The Hunter closest to a position (levels can have several: Hunter, Hunter2, ...), or nil
+function ArenaLayout.NearestHunter(position)
+	local nearest, nearestDistance = nil, math.huge
+	for _, child in workspace:GetChildren() do
+		if child:IsA("Model") and child.Name:match("^Hunter%d*$") then
+			local root = child:FindFirstChild("HumanoidRootPart")
+			if root then
+				local distance = (root.Position - position).Magnitude
+				if distance < nearestDistance then
+					nearest, nearestDistance = root, distance
+				end
+			end
+		end
+	end
+	return nearest, nearestDistance
 end
 
 function ArenaLayout.TotalHits()

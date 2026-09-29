@@ -1,9 +1,12 @@
--- First-person hand holding a flashlight, shown from the fake victory onwards
+-- First-person hand holding a flashlight, shown from the fake victory onwards.
+-- It flickers when the Hunter is close, and on levels with a BATTERY it runs down and needs pickups.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
+local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 local Phases = GameState.Phases
 
 local player = Players.LocalPlayer
@@ -142,27 +145,152 @@ GameState.Resetting:Connect(function(target)
 	end
 end)
 
--- The flashlight flickers now and then in the horror, and a lot when the Hunter is close
+-------------------------------------------------------------------------
+-- BATTERY (levels with BATTERY): drains in the horror, glowing cells refill it
+-------------------------------------------------------------------------
+local PICKUP_REACH = 4
+local battery = 1 -- 0..1
+local pickupsFolder = nil
+
+local batteryGui = Instance.new("ScreenGui")
+batteryGui.Name = "BatteryGui"
+batteryGui.ResetOnSpawn = false
+batteryGui.IgnoreGuiInset = true
+batteryGui.Enabled = false
+batteryGui.Parent = player:WaitForChild("PlayerGui")
+
+local batteryFrame = Instance.new("Frame")
+batteryFrame.AnchorPoint = Vector2.new(0, 1)
+batteryFrame.Position = UDim2.new(0, 24, 1, -24)
+batteryFrame.Size = UDim2.fromOffset(200, 26)
+batteryFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+batteryFrame.BackgroundTransparency = 0.3
+batteryFrame.Parent = batteryGui
+local frameStroke = Instance.new("UIStroke")
+frameStroke.Color = Color3.fromRGB(200, 200, 200)
+frameStroke.Thickness = 2
+frameStroke.Parent = batteryFrame
+local batteryFill = Instance.new("Frame")
+batteryFill.BorderSizePixel = 0
+batteryFill.Position = UDim2.fromOffset(3, 3)
+batteryFill.Parent = batteryFrame
+local batteryLabel = Instance.new("TextLabel")
+batteryLabel.BackgroundTransparency = 1
+batteryLabel.Size = UDim2.fromScale(1, 1)
+batteryLabel.Text = "BATTERY"
+batteryLabel.FontFace = Font.fromEnum(Enum.Font.GothamBlack)
+batteryLabel.TextColor3 = Color3.new(1, 1, 1)
+batteryLabel.TextStrokeTransparency = 0.4
+batteryLabel.TextSize = 14
+batteryLabel.ZIndex = 2
+batteryLabel.Parent = batteryFrame
+
+local function UpdateBatteryBar()
+	batteryFill.Size = UDim2.new(battery, -6 * battery, 1, -6)
+	batteryFill.BackgroundColor3 = if battery > 0.5 then Color3.fromRGB(120, 255, 120)
+		elseif battery > 0.2 then Color3.fromRGB(255, 210, 60)
+		else Color3.fromRGB(255, 60, 60)
+end
+
+local function RemovePickups()
+	if pickupsFolder then
+		pickupsFolder:Destroy()
+		pickupsFolder = nil
+	end
+end
+
+local function MakePickups(config)
+	RemovePickups()
+	pickupsFolder = Instance.new("Folder")
+	pickupsFolder.Name = "BatteryPickups"
+	for index, position in config.PICKUPS do
+		local cell = Instance.new("Part")
+		cell.Name = "Battery" .. index
+		cell.Anchored = true
+		cell.CanCollide = false
+		cell.CanQuery = false
+		cell.CanTouch = false
+		cell.Material = Enum.Material.Neon
+		cell.Color = Color3.fromRGB(255, 220, 60)
+		cell.Size = Vector3.new(0.8, 1.6, 0.8)
+		cell.Position = position + Vector3.new(0, 2, 0)
+		cell.Parent = pickupsFolder
+		local glow = Instance.new("PointLight")
+		glow.Color = cell.Color
+		glow.Range = 8
+		glow.Brightness = 1.5
+		glow.Parent = cell
+	end
+	pickupsFolder.Parent = workspace
+end
+
+GameState.OnPhase(Phases.Horror, function()
+	local config = ArenaLayout.BATTERY
+	battery = 1
+	batteryGui.Enabled = config ~= nil
+	if config then
+		MakePickups(config) -- Also fresh ones when the escape is retried
+		UpdateBatteryBar()
+	else
+		RemovePickups()
+	end
+end)
+
+GameState.Changed:Connect(function(newPhase)
+	if newPhase ~= Phases.Horror then
+		batteryGui.Enabled = false
+	end
+end)
+
+GameState.Resetting:Connect(function(target)
+	if GameState.IsFullReset(target) then
+		RemovePickups()
+	end
+end)
+
+-------------------------------------------------------------------------
+-- BEAM each frame: battery, flicker when the Hunter is close
+-------------------------------------------------------------------------
 local FLICKER_RANGE = 35
 local flickerUntil = 0
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function(deltaTime)
 	if not beam or not GameState.Is(Phases.Horror) then return end
-
 	local now = os.clock()
+
+	-- Battery drain and pickups
+	local config = ArenaLayout.BATTERY
+	local power = 1
+	if config then
+		battery = math.max(battery - deltaTime / config.DRAIN_SECONDS, 0)
+		if pickupsFolder then
+			local here = camera.CFrame.Position
+			for _, cell in pickupsFolder:GetChildren() do
+				cell.CFrame = cell.CFrame * CFrame.Angles(0, deltaTime * 2, 0)
+				if (Vector3.new(cell.Position.X - here.X, 0, cell.Position.Z - here.Z)).Magnitude < PICKUP_REACH then
+					battery = math.min(battery + config.REFILL, 1)
+					SoundFx.Play("UiClick", {volume = 0.6, speed = 1.4})
+					cell:Destroy()
+				end
+			end
+		end
+		UpdateBatteryBar()
+		power = if battery <= 0 then 0.04 else 0.25 + battery * 0.75
+		beam.Range = if battery <= 0 then 8 else 20 + battery * 25
+	end
+
 	if now < flickerUntil then
-		beam.Brightness = baseBrightness * (if math.random() < 0.5 then 0.05 else 0.4)
+		beam.Brightness = baseBrightness * power * (if math.random() < 0.5 then 0.05 else 0.4)
 		return
 	end
-	beam.Brightness = baseBrightness
+	beam.Brightness = baseBrightness * power
 
 	local chance = 0.002 -- Rare random flicker
-	local hunter = workspace:FindFirstChild("Hunter")
-	local hunterRoot = hunter and hunter:FindFirstChild("HumanoidRootPart")
-	if hunterRoot then
-		local distance = (hunterRoot.Position - camera.CFrame.Position).Magnitude
-		if distance < FLICKER_RANGE then
-			chance += (1 - distance / FLICKER_RANGE) * 0.05
-		end
+	if config and battery < 0.2 then
+		chance += 0.03 -- An almost empty battery flickers a lot
+	end
+	local hunterRoot, distance = ArenaLayout.NearestHunter(camera.CFrame.Position)
+	if hunterRoot and distance < FLICKER_RANGE then
+		chance += (1 - distance / FLICKER_RANGE) * 0.05
 	end
 	if math.random() < chance then
 		flickerUntil = now + 0.05 + math.random() * 0.25
