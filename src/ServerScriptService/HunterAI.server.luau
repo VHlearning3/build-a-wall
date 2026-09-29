@@ -4,14 +4,24 @@ local PathfindingService = game:GetService("PathfindingService")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local ServerPhase = require(ServerScriptService:WaitForChild("ServerPhase"))
+local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 
 local hunter = workspace:WaitForChild("Hunter")
 local humanoid = hunter:WaitForChild("Humanoid")
 local rootPart = hunter:WaitForChild("HumanoidRootPart")
 local core = workspace:WaitForChild("EnemyCore")
 
-local WALK_SPEED = 13 -- The player walks at 16, so running away works
+local BASE_SPEED = 11 -- The player walks at 16, so running away works
+local SPEED_PER_WIN = 0.8 -- Each escape makes the next Hunter a little faster
+local MAX_SPEED = 15
+local STALK_SPEED_FACTOR = 0.55 -- Slow creeping while it has not found the player yet
+local LAIR_WAIT_SECONDS = 6 -- Quiet start: the player hears nothing at first
+local CHASE_RANGE = 28 -- Starts chasing when it sees the player this close
+local CLOSE_RANGE = 14 -- ...or when the player is this close, seen or not
+local LOSE_TRACK_SECONDS = 5 -- Goes back to stalking after not seeing the player this long
 local REPATH_SECONDS = 0.5
 local STEP_SECONDS = 0.1
 local WAYPOINT_REACHED = 3
@@ -22,6 +32,7 @@ local EYE_COLOR = Color3.fromRGB(255, 0, 0)
 
 local coreStart = core.Position -- The core changes shape later, remember where it started
 local hunting = false
+local huntGeneration = 0 -- Bumped every hunt so loops from an earlier round stop
 local graceUntil = 0
 
 -------------------------------------------------------------------------
@@ -152,7 +163,7 @@ local function PlaceAtSpawn()
 end
 
 -------------------------------------------------------------------------
--- CHASE
+-- HUNT: wait in the lair, creep towards the player, then chase once it sees them
 -------------------------------------------------------------------------
 local function GetTarget()
 	for _, player in Players:GetPlayers() do
@@ -160,10 +171,10 @@ local function GetTarget()
 		local targetHumanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
 		if targetHumanoid and targetRoot and targetHumanoid.Health > 0 then
-			return targetRoot
+			return targetRoot, player
 		end
 	end
-	return nil
+	return nil, nil
 end
 
 local function HasLineOfSight(targetRoot)
@@ -174,7 +185,16 @@ local function HasLineOfSight(targetRoot)
 	return workspace:Raycast(rootPart.Position, direction, params) == nil
 end
 
-local function ChaseLoop()
+local function ChaseSpeed(player)
+	local wins = player and player:GetAttribute("Wins") or 0
+	return math.min(BASE_SPEED + wins * SPEED_PER_WIN, MAX_SPEED)
+end
+
+local function Growl()
+	SoundFx.Play("Growl", {parent = hunter:FindFirstChild("Head") or rootPart, volume = 1, speed = 0.75 + math.random() * 0.15, maxDistance = 90})
+end
+
+local function HuntLoop(generation)
 	local path = PathfindingService:CreatePath({
 		AgentRadius = 2,
 		AgentHeight = 5,
@@ -184,40 +204,81 @@ local function ChaseLoop()
 	local waypoints = {}
 	local waypointIndex = 0
 	local lastPathTime = 0
+	local chasing = false
+	local lastSeen = 0
+	local stalkGoal = nil
+	local nextGrowl = 0
 
-	while hunting do
-		local targetRoot = GetTarget()
-		if targetRoot and os.clock() >= graceUntil then
-			if HasLineOfSight(targetRoot) then
-				-- Straight at the player when nothing is in the way
-				waypoints = {}
-				humanoid:MoveTo(targetRoot.Position)
+	local function FollowPathTo(goal, repathSeconds)
+		if os.clock() - lastPathTime > repathSeconds or waypointIndex > #waypoints then
+			lastPathTime = os.clock()
+			local ok = pcall(function()
+				path:ComputeAsync(rootPart.Position, goal)
+			end)
+			if ok and path.Status == Enum.PathStatus.Success then
+				waypoints = path:GetWaypoints()
+				waypointIndex = 2
 			else
-				if os.clock() - lastPathTime > REPATH_SECONDS or waypointIndex > #waypoints then
-					lastPathTime = os.clock()
-					local ok = pcall(function()
-						path:ComputeAsync(rootPart.Position, targetRoot.Position)
-					end)
-					if ok and path.Status == Enum.PathStatus.Success then
-						waypoints = path:GetWaypoints()
-						waypointIndex = 2
-					else
-						waypoints = {}
-						humanoid:MoveTo(targetRoot.Position) -- Estää jumiutumisen
-					end
-				end
+				waypoints = {}
+				humanoid:MoveTo(goal) -- Estää jumiutumisen
+			end
+		end
 
-				local waypoint = waypoints[waypointIndex]
-				if waypoint then
-					local flat = Vector3.new(waypoint.Position.X - rootPart.Position.X, 0, waypoint.Position.Z - rootPart.Position.Z)
-					if flat.Magnitude < WAYPOINT_REACHED then
-						waypointIndex += 1
-						waypoint = waypoints[waypointIndex]
-					end
-					if waypoint then
-						humanoid:MoveTo(waypoint.Position)
-					end
+		local waypoint = waypoints[waypointIndex]
+		if waypoint then
+			local flat = Vector3.new(waypoint.Position.X - rootPart.Position.X, 0, waypoint.Position.Z - rootPart.Position.Z)
+			if flat.Magnitude < WAYPOINT_REACHED then
+				waypointIndex += 1
+				waypoint = waypoints[waypointIndex]
+			end
+			if waypoint then
+				humanoid:MoveTo(waypoint.Position)
+			end
+		end
+	end
+
+	while hunting and generation == huntGeneration do
+		local targetRoot, player = GetTarget()
+		if targetRoot and os.clock() >= graceUntil then
+			local distance = (targetRoot.Position - rootPart.Position).Magnitude
+			local canSee = HasLineOfSight(targetRoot)
+			if canSee then
+				lastSeen = os.clock()
+			end
+
+			-- Decide between stalking and chasing
+			if not chasing and ((canSee and distance < CHASE_RANGE) or distance < CLOSE_RANGE) then
+				chasing = true
+				Growl()
+				nextGrowl = os.clock() + 8 + math.random() * 6
+			elseif chasing and not canSee and distance > CHASE_RANGE * 1.5 and os.clock() - lastSeen > LOSE_TRACK_SECONDS then
+				chasing = false
+				stalkGoal = nil
+			end
+
+			local fullSpeed = ChaseSpeed(player)
+			if chasing then
+				humanoid.WalkSpeed = fullSpeed
+				if os.clock() > nextGrowl then
+					Growl()
+					nextGrowl = os.clock() + 8 + math.random() * 6
 				end
+				if canSee then
+					-- Straight at the player when nothing is in the way
+					waypoints = {}
+					humanoid:MoveTo(targetRoot.Position)
+				else
+					FollowPathTo(targetRoot.Position, REPATH_SECONDS)
+				end
+			else
+				-- Creep towards somewhere near the player, not exactly at them
+				humanoid.WalkSpeed = fullSpeed * STALK_SPEED_FACTOR
+				if not stalkGoal or (Vector3.new(stalkGoal.X - rootPart.Position.X, 0, stalkGoal.Z - rootPart.Position.Z)).Magnitude < 6 then
+					local offset = Vector3.new(math.random(-15, 15), 0, math.random(-15, 15))
+					stalkGoal = targetRoot.Position + offset
+					lastPathTime = 0
+				end
+				FollowPathTo(stalkGoal, 2)
 			end
 		else
 			humanoid:MoveTo(rootPart.Position)
@@ -225,6 +286,19 @@ local function ChaseLoop()
 		task.wait(STEP_SECONDS)
 	end
 	humanoid:MoveTo(rootPart.Position)
+end
+
+-- Heavy footsteps you can hear through the walls before you see it
+local function FootstepLoop(generation)
+	while hunting and generation == huntGeneration do
+		local speed = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z).Magnitude
+		if speed > 1 then
+			SoundFx.Play("Footstep", {parent = rootPart, volume = 0.9, speed = 0.6 + math.random() * 0.1, maxDistance = 70})
+			task.wait(math.clamp(5 / speed, 0.28, 0.8))
+		else
+			task.wait(0.2)
+		end
+	end
 end
 
 -------------------------------------------------------------------------
@@ -247,28 +321,37 @@ end
 -------------------------------------------------------------------------
 DressUp()
 SetUpAnimations()
-humanoid.WalkSpeed = WALK_SPEED
 for _, part in hunter:GetDescendants() do
 	if part:IsA("BasePart") then
 		part.Touched:Connect(OnTouched)
 	end
 end
 
--- Hidden and idle during the RTS phase
+-- Hidden and idle until the horror
 hunter.Parent = ServerStorage
 
 ServerPhase.Changed:Connect(function(phase)
 	if phase == "Horror" then
+		-- Also runs again when the player retries the escape
+		hunting = false
+		huntGeneration += 1
 		hunter.Parent = workspace
 		PlaceAtSpawn()
 		rootPart:SetNetworkOwner(nil) -- The server moves the Hunter
-		graceUntil = os.clock() + 1
+		graceUntil = os.clock() + LAIR_WAIT_SECONDS
 		hunting = true
 		print("The Hunter is loose...")
-		task.spawn(ChaseLoop)
+		task.spawn(HuntLoop, huntGeneration)
+		task.spawn(FootstepLoop, huntGeneration)
 	elseif phase == "TrueVictory" or phase == "GameOver" then
 		hunting = false
+		humanoid:MoveTo(rootPart.Position)
 		print("The Hunter stops. The game is over.")
+	elseif phase == "Menu" or phase == "RTS" then
+		-- A new round from the start: back into hiding
+		hunting = false
+		huntGeneration += 1
+		hunter.Parent = ServerStorage
 	end
 end)
 

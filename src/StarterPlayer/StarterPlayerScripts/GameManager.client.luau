@@ -1,9 +1,11 @@
--- Game director: moves the game through RTS -> FakeVictory -> Horror -> TrueVictory
+-- Game director: moves the game through Menu -> RTS -> FakeVictory -> Horror -> TrueVictory (or GameOver)
+-- and cleans up its part of the world when a round is reset
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 local Phases = GameState.Phases
 
 local coreHitEvent = ReplicatedStorage:WaitForChild("CoreHitEvent")
@@ -45,12 +47,22 @@ coreHitEvent.Event:Connect(function()
 	currentOrbs += 1
 	core:SetAttribute("Hits", currentOrbs)
 
-	-- Flash effect (does not pause this handler)
+	-- Flash, shake and boom (does not pause this handler)
 	core.BrickColor = BrickColor.new("White")
 	task.delay(0.1, function()
 		if GameState.Is(Phases.RTS) then
 			core.BrickColor = BrickColor.new("Really red")
 		end
+	end)
+	SoundFx.Play("CoreHit", {parent = core, volume = 0.6, maxDistance = 300})
+	task.spawn(function()
+		local home = core.CFrame
+		for shake = 1, 8 do
+			local strength = (9 - shake) * 0.12
+			core.CFrame = home * CFrame.new((math.random() - 0.5) * strength, (math.random() - 0.5) * strength, (math.random() - 0.5) * strength)
+			task.wait(0.03)
+		end
+		core.CFrame = home
 	end)
 
 	if currentOrbs >= ORBS_REQUIRED then
@@ -143,10 +155,21 @@ local function BuildEscapeZone()
 	return folder
 end
 
+local function StopVictoryCheck()
+	if victoryConnection then
+		victoryConnection:Disconnect()
+		victoryConnection = nil
+	end
+end
+
 GameState.OnPhase(Phases.Horror, function()
-	BuildEscapeZone()
+	-- A retry keeps the zone that is already there
+	if not workspace:FindFirstChild("EscapeZone") then
+		BuildEscapeZone()
+	end
 
 	-- Escaped when the player stands on the zone (checked every frame, more reliable than Touched)
+	StopVictoryCheck()
 	victoryConnection = RunService.Heartbeat:Connect(function()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -193,10 +216,7 @@ if player.Character then
 end
 
 GameState.OnPhase(Phases.GameOver, function()
-	if victoryConnection then
-		victoryConnection:Disconnect()
-		victoryConnection = nil
-	end
+	StopVictoryCheck()
 	print("GAME OVER: The Hunter got you.")
 end)
 
@@ -204,10 +224,7 @@ end)
 -- TRUE VICTORY: the player made it out
 -------------------------------------------------------------------------
 GameState.OnPhase(Phases.TrueVictory, function()
-	if victoryConnection then
-		victoryConnection:Disconnect()
-		victoryConnection = nil
-	end
+	StopVictoryCheck()
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChild("Humanoid")
@@ -216,4 +233,38 @@ GameState.OnPhase(Phases.TrueVictory, function()
 		humanoid.JumpPower = 0
 	end
 	print("TRUE VICTORY: You survived your own maze!")
+end)
+
+-------------------------------------------------------------------------
+-- RESET: try again (back to the horror) or a whole new round
+-------------------------------------------------------------------------
+local coreHome = core.CFrame
+
+-- The server decides when a new round starts (after a menu button) and tells us where to begin
+ReplicatedStorage.Remotes:WaitForChild("RoundReset").OnClientEvent:Connect(function(target)
+	if typeof(target) == "string" and Phases[target] then
+		GameState.Reset(target)
+	end
+end)
+
+GameState.Resetting:Connect(function(target)
+	StopVictoryCheck()
+	player:SetAttribute("LivesLeft", LIVES)
+
+	if GameState.IsFullReset(target) then
+		currentOrbs = 0
+		core:SetAttribute("Hits", 0)
+		core.CFrame = coreHome
+		core.Transparency = 0
+		core.CanCollide = true
+		core.BrickColor = BrickColor.new("Really red")
+		local coreGlow = core:FindFirstChild("CoreGlow")
+		if coreGlow then
+			coreGlow.Enabled = true
+		end
+		local zone = workspace:FindFirstChild("EscapeZone")
+		if zone then
+			zone:Destroy()
+		end
+	end
 end)

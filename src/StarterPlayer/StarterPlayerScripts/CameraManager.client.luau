@@ -15,7 +15,8 @@ local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local cameraSpeed = 60 -- Kuinka nopeasti RTS-kamera liikkuu
 local MIN_HEIGHT, MAX_HEIGHT = 30, 140
 local ZOOM_STEP = 10 -- Studs per mouse wheel notch
-local rtsCameraPosition = Vector3.new(0, 110, 5) -- Starts high enough to see both the spawn and the core
+local RTS_START = Vector3.new(0, 110, 5) -- High enough to see both the spawn and the core
+local rtsCameraPosition = RTS_START
 
 local function ClampCamera()
 	rtsCameraPosition = Vector3.new(
@@ -53,12 +54,13 @@ UserInputService.TouchPinch:Connect(function(_, scale, _, state, gameProcessed)
 	ClampCamera()
 end)
 
--- The default movement controls (keyboard and the mobile thumbstick) are only on in the horror
+-- The default movement controls (keyboard and the mobile thumbstick) are only on in the horror.
+-- With the newer input action system there is no PlayerModule; then WalkSpeed 0 alone keeps the player still.
 local controls = nil
 task.spawn(function()
-	local ok, playerModule = pcall(function()
-		return require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
-	end)
+	local playerModuleScript = player:WaitForChild("PlayerScripts"):FindFirstChild("PlayerModule")
+	if not playerModuleScript then return end
+	local ok, playerModule = pcall(require, playerModuleScript)
 	if ok then
 		controls = playerModule:GetControls()
 		if not GameState.Is(Phases.Horror) then
@@ -105,8 +107,20 @@ local function FollowCharacter(character)
 	end
 end
 
+-- Main menu: a slow sweep over the arena while the orbs bounce around
+local function UpdateMenuCamera()
+	camera.CameraType = Enum.CameraType.Scriptable
+	local t = os.clock() * 0.08
+	local eye = Vector3.new(math.sin(t) * 60, 75, math.cos(t) * 90)
+	camera.CFrame = CFrame.lookAt(eye, Vector3.new(0, 0, 0))
+end
+
 -- Pääsilmukka RTS-kameran liikuttamiseen
 local function UpdateRTSCamera(deltaTime)
+	if GameState.Is(Phases.Menu) then
+		UpdateMenuCamera()
+		return
+	end
 	if not GameState.Is(Phases.RTS) then return end
 
 	-- Pakotetaan kamera Scriptable-tilaan
@@ -150,10 +164,22 @@ GameState.OnPhase(Phases.Horror, function()
 	print("CONTAINMENT BREACH: Horror mode activated!")
 end)
 
+-- The game has ended: hold the last view and free the mouse so the end screen buttons can be clicked
+local function FreezeViewForMenu()
+	player.CameraMode = Enum.CameraMode.Classic
+	local lastView = camera.CFrame
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.CFrame = lastView
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	UserInputService.MouseIconEnabled = true
+end
+GameState.OnPhase(Phases.TrueVictory, FreezeViewForMenu)
+GameState.OnPhase(Phases.GameOver, FreezeViewForMenu)
+
 -- Respawns keep the rules of the current phase
 local function OnCharacter(character)
 	ApplyMovement(character)
-	if not GameState.Is(Phases.RTS) then
+	if GameState.Is(Phases.FakeVictory) or GameState.Is(Phases.Horror) then
 		FollowCharacter(character)
 	end
 end
@@ -162,3 +188,14 @@ player.CharacterAdded:Connect(OnCharacter)
 if player.Character then
 	task.spawn(OnCharacter, player.Character)
 end
+
+-- A new round from the start: back to the overhead camera
+GameState.Resetting:Connect(function(target)
+	if GameState.IsFullReset(target) then
+		rtsCameraPosition = RTS_START
+		player.CameraMode = Enum.CameraMode.Classic
+		if controls then
+			controls:Disable()
+		end
+	end
+end)

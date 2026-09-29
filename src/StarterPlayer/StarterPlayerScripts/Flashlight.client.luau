@@ -99,6 +99,8 @@ local function BuildViewmodel()
 	end)
 end
 
+local baseBrightness = 0
+
 local function ApplyBeam(phase)
 	local settings = BEAM[phase]
 	if not settings then return end
@@ -108,6 +110,16 @@ local function ApplyBeam(phase)
 	beam.Range = settings.range
 	beam.Angle = settings.angle
 	beam.Brightness = settings.brightness
+	baseBrightness = settings.brightness
+end
+
+local function RemoveViewmodel()
+	if viewmodel then
+		renderConnection:Disconnect()
+		viewmodel:Destroy()
+		viewmodel = nil
+		beam = nil
+	end
 end
 
 GameState.Changed:Connect(function(newPhase)
@@ -117,10 +129,42 @@ end)
 -- Rebuild after a respawn so the arm keeps the right skin colour
 player.CharacterAdded:Connect(function()
 	if viewmodel then
-		renderConnection:Disconnect()
-		viewmodel:Destroy()
-		viewmodel = nil
+		RemoveViewmodel()
 		task.wait() -- Let BodyColors load
 		ApplyBeam(GameState.Get())
+	end
+end)
+
+-- A new round from the start puts the flashlight away
+GameState.Resetting:Connect(function(target)
+	if GameState.IsFullReset(target) then
+		RemoveViewmodel()
+	end
+end)
+
+-- The flashlight flickers now and then in the horror, and a lot when the Hunter is close
+local FLICKER_RANGE = 35
+local flickerUntil = 0
+RunService.Heartbeat:Connect(function()
+	if not beam or not GameState.Is(Phases.Horror) then return end
+
+	local now = os.clock()
+	if now < flickerUntil then
+		beam.Brightness = baseBrightness * (if math.random() < 0.5 then 0.05 else 0.4)
+		return
+	end
+	beam.Brightness = baseBrightness
+
+	local chance = 0.002 -- Rare random flicker
+	local hunter = workspace:FindFirstChild("Hunter")
+	local hunterRoot = hunter and hunter:FindFirstChild("HumanoidRootPart")
+	if hunterRoot then
+		local distance = (hunterRoot.Position - camera.CFrame.Position).Magnitude
+		if distance < FLICKER_RANGE then
+			chance += (1 - distance / FLICKER_RANGE) * 0.05
+		end
+	end
+	if math.random() < chance then
+		flickerUntil = now + 0.05 + math.random() * 0.25
 	end
 end)

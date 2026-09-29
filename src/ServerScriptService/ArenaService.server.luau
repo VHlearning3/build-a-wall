@@ -9,9 +9,7 @@ local RTS_COLOR = Color3.fromRGB(40, 55, 80) -- Dark steel blue: clearly part of
 local TRIM_COLOR = Color3.fromRGB(150, 185, 235) -- Pale steel, so level walls never look like the cyan Tower piece
 local TRIM_WIDTH = 0.5
 
-local arena = Instance.new("Folder")
-arena.Name = "Arena"
-
+local arena = nil
 local trims = {}
 
 local function MakeWall(name, rect, parent)
@@ -42,23 +40,41 @@ local function MakeWall(name, rect, parent)
 	table.insert(trims, trim)
 end
 
-local border = Instance.new("Folder")
-border.Name = "Border"
-border.Parent = arena
-for index, rect in ArenaLayout.Border() do
-	MakeWall("BorderWall" .. index, rect, border)
+-- Builds a fresh arena (also at the start of every new round). The folder itself stays,
+-- because client scripts keep a reference to it.
+local function BuildArena()
+	table.clear(trims)
+	if arena then
+		arena:ClearAllChildren()
+	else
+		arena = Instance.new("Folder")
+		arena.Name = "Arena"
+	end
+
+	local border = Instance.new("Folder")
+	border.Name = "Border"
+	border.Parent = arena
+	for index, rect in ArenaLayout.Border() do
+		MakeWall("BorderWall" .. index, rect, border)
+	end
+
+	local maze = Instance.new("Folder")
+	maze.Name = "Maze"
+	maze.Parent = arena
+	for index, rect in ArenaLayout.MAZE do
+		MakeWall("MazeWall" .. index, rect, maze)
+	end
+
+	arena.Parent = workspace
 end
 
-local maze = Instance.new("Folder")
-maze.Name = "Maze"
-maze.Parent = arena
-for index, rect in ArenaLayout.MAZE do
-	MakeWall("MazeWall" .. index, rect, maze)
-end
+BuildArena()
 
-arena.Parent = workspace
-
-ServerPhase.Changed:Connect(function(phase)
+ServerPhase.Changed:Connect(function(phase, _, isReset)
+	if isReset and (phase == "Menu" or phase == "RTS") then
+		BuildArena()
+		return
+	end
 	if phase ~= "FakeVictory" then return end
 	for _, trim in trims do
 		trim:Destroy()

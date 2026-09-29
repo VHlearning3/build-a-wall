@@ -1,5 +1,6 @@
 -- World look per phase: the concrete room with red ceiling alarms in the fake victory,
--- thick fog in the horror that thins near the escape zone, and the fog lifting at the true victory
+-- thick fog in the horror that thins near the escape zone, and the fog lifting at the true victory.
+-- A new round puts everything back the way it was at the start.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
@@ -29,6 +30,34 @@ local ALARM_PULSE_SPEED = 4 -- Radians per second
 local roomFolder = nil
 local alarms = {} -- {part, light}
 local alarmConnection = nil
+local fogConnection = nil
+local liftTweens = {}
+
+-- Remember how the world looked at the start, so a new round can put it back
+local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") -- Overrides the Fog settings when present
+local letter = entitySpawn:FindFirstChild("Letter", true)
+local startLook = {
+	lighting = {
+		Ambient = Lighting.Ambient,
+		OutdoorAmbient = Lighting.OutdoorAmbient,
+		Brightness = Lighting.Brightness,
+		ClockTime = Lighting.ClockTime,
+		FogColor = Lighting.FogColor,
+		FogStart = Lighting.FogStart,
+		FogEnd = Lighting.FogEnd,
+	},
+	atmosphere = atmosphere and {
+		Density = atmosphere.Density,
+		Offset = atmosphere.Offset,
+		Color = atmosphere.Color,
+		Decay = atmosphere.Decay,
+		Glare = atmosphere.Glare,
+		Haze = atmosphere.Haze,
+	},
+	baseplate = {Material = baseplate.Material, Color = baseplate.Color},
+	spawnPad = {Material = entitySpawn.Material, Color = entitySpawn.Color},
+	letterTransparency = letter and letter.TextTransparency,
+}
 
 local function MakeAlarm(position, castShadows)
 	local lamp = Instance.new("Part")
@@ -113,7 +142,6 @@ GameState.OnPhase(Phases.FakeVictory, function()
 	-- The spawn pad stops glowing but stays a faint landmark
 	entitySpawn.Material = Enum.Material.SmoothPlastic
 	entitySpawn.Color = Color3.fromRGB(20, 40, 90)
-	local letter = entitySpawn:FindFirstChild("Letter", true)
 	if letter then
 		letter.TextTransparency = 0.7
 	end
@@ -130,7 +158,6 @@ GameState.OnPhase(Phases.Horror, function()
 	Lighting.FogColor = Color3.fromRGB(6, 6, 8)
 	Lighting.FogStart = 0
 	Lighting.FogEnd = 45
-	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") -- Overrides the Fog settings when present
 	if atmosphere then
 		atmosphere.Density = 0.75
 		atmosphere.Offset = 0
@@ -142,12 +169,11 @@ GameState.OnPhase(Phases.Horror, function()
 
 	-- The fog thins as the player gets close to the escape zone
 	local escapeCenter = Vector3.new(core.Position.X, 0, core.Position.Z)
-	local fogConnection
+	if fogConnection then
+		fogConnection:Disconnect()
+	end
 	fogConnection = RunService.RenderStepped:Connect(function()
-		if not GameState.Is(Phases.Horror) then
-			fogConnection:Disconnect()
-			return
-		end
+		if not GameState.Is(Phases.Horror) then return end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if not root or not atmosphere then return end
@@ -161,13 +187,54 @@ end)
 -- True victory: the fog lifts and a cold dawn light comes up
 GameState.OnPhase(Phases.TrueVictory, function()
 	local liftInfo = TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
 	if atmosphere then
-		TweenService:Create(atmosphere, liftInfo, {Density = 0.1, Haze = 0.5}):Play()
+		table.insert(liftTweens, TweenService:Create(atmosphere, liftInfo, {Density = 0.1, Haze = 0.5}))
 	end
-	TweenService:Create(Lighting, liftInfo, {
+	table.insert(liftTweens, TweenService:Create(Lighting, liftInfo, {
 		OutdoorAmbient = Color3.fromRGB(70, 85, 75),
 		Ambient = Color3.fromRGB(35, 45, 40),
 		FogEnd = 400,
-	}):Play()
+	}))
+	for _, tween in liftTweens do
+		tween:Play()
+	end
+end)
+
+-- New round from the start: back to the bright neon arena
+GameState.Resetting:Connect(function(target)
+	for _, tween in liftTweens do
+		tween:Cancel()
+	end
+	table.clear(liftTweens)
+	if fogConnection then
+		fogConnection:Disconnect()
+		fogConnection = nil
+	end
+	if not GameState.IsFullReset(target) then return end
+
+	if alarmConnection then
+		alarmConnection:Disconnect()
+		alarmConnection = nil
+	end
+	table.clear(alarms)
+	if roomFolder then
+		roomFolder:Destroy()
+		roomFolder = nil
+	end
+
+	for property, value in startLook.lighting do
+		Lighting[property] = value
+	end
+	if atmosphere and startLook.atmosphere then
+		for property, value in startLook.atmosphere do
+			atmosphere[property] = value
+		end
+	end
+	baseplate.Material = startLook.baseplate.Material
+	baseplate.Color = startLook.baseplate.Color
+	entitySpawn.Material = startLook.spawnPad.Material
+	entitySpawn.Color = startLook.spawnPad.Color
+	if letter then
+		letter.TextTransparency = startLook.letterTransparency
+	end
 end)

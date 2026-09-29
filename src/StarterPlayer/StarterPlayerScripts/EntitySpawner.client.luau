@@ -2,13 +2,15 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local workspace = game:GetService("Workspace")
 
+local TweenService = game:GetService("TweenService")
+
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 local Phases = GameState.Phases
 
 local spawnPoint = workspace:WaitForChild("EntitySpawn")
 local coreHitEvent = ReplicatedStorage:WaitForChild("CoreHitEvent") -- Uusi signaali osumille
 
-local isRTSMode = true
 local entities = {}
 local moveSpeed = 20
 local entitySize = 5 -- Kasvatettu koko (oli 3)
@@ -29,6 +31,31 @@ raycastParams.FilterDescendantsInstances = {
 }
 raycastParams.FilterType = Enum.RaycastFilterType.Include
 
+-- A quick expanding flash where an orb bounces
+local function Spark(position)
+	local spark = Instance.new("Part")
+	spark.Name = "Spark"
+	spark.Shape = Enum.PartType.Ball
+	spark.Anchored = true
+	spark.CanCollide = false
+	spark.CanQuery = false
+	spark.CanTouch = false
+	spark.CastShadow = false
+	spark.Material = Enum.Material.Neon
+	spark.Color = Color3.fromRGB(200, 255, 255)
+	spark.Size = Vector3.new(1, 1, 1)
+	spark.Position = position
+	spark.Parent = orbsFolder
+	local tween = TweenService:Create(spark, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(5, 5, 5),
+		Transparency = 1,
+	})
+	tween.Completed:Once(function()
+		spark:Destroy()
+	end)
+	tween:Play()
+end
+
 local function SpawnEntity()
 	local orb = Instance.new("Part")
 	orb.Name = "EnergyOrb"
@@ -48,15 +75,22 @@ local function SpawnEntity()
 	table.insert(entities, {model = orb, dir = direction, born = os.clock()})
 end
 
+-- Orbs fly in the main menu (as a backdrop) and in the RTS phase
+local function IsActive()
+	return GameState.Is(Phases.Menu) or GameState.Is(Phases.RTS)
+end
+
 task.spawn(function()
-	while isRTSMode do
-		SpawnEntity()
-		task.wait(3)
+	while true do
+		if IsActive() then
+			SpawnEntity()
+		end
+		task.wait(2.5)
 	end
 end)
 
 RunService.RenderStepped:Connect(function(deltaTime)
-	if not isRTSMode then return end
+	if not IsActive() then return end
 
 	for i, entityData in pairs(entities) do
 		local orb = entityData.model
@@ -83,6 +117,8 @@ RunService.RenderStepped:Connect(function(deltaTime)
 					-- Muussa tapauksessa (seinät) kimpoaa normaalisti
 					local reflectDir = dir - (2 * dir:Dot(result.Normal) * result.Normal)
 					entityData.dir = Vector3.new(reflectDir.X, 0, reflectDir.Z).Unit
+					Spark(result.Position)
+					SoundFx.Play("OrbBounce", {parent = orb, volume = 0.35, speed = 0.9 + math.random() * 0.4})
 				end
 			else
 				-- Liikutaan eteenpäin
@@ -94,10 +130,15 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	end
 end)
 
--- Orbs stop as soon as the RTS phase ends
-GameState.Changed:Connect(function(newPhase)
-	if newPhase == Phases.RTS then return end
-	isRTSMode = false
+local function ClearOrbs()
 	orbsFolder:ClearAllChildren()
 	entities = {}
+end
+
+-- Orbs vanish when the building ends, and a new round starts with a clean arena
+GameState.Changed:Connect(function(newPhase, oldPhase)
+	if newPhase ~= Phases.RTS or oldPhase ~= Phases.Menu then
+		ClearOrbs()
+	end
 end)
+GameState.Resetting:Connect(ClearOrbs)

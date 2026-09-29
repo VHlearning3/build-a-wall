@@ -1,7 +1,11 @@
 {
   "className": "Atmosphere",
   "properties": {
-    "SourceAssetId": 7108851308.0,
-    "Density": 0.44200000166893005
+    "Density": 0.25,
+    "Offset": 0,
+    "Color": [0.2, 0.32, 0.55],
+    "Decay": [0.05, 0.1, 0.25],
+    "Glare": 0,
+    "Haze": 0.5
   }
 }

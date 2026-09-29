@@ -12,7 +12,6 @@ local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local placePiece = remotes:WaitForChild("PlacePiece")
 local removePiece = remotes:WaitForChild("RemovePiece")
 local baseplate = workspace:WaitForChild("Baseplate")
-local arena = workspace:WaitForChild("Arena")
 
 local MIN_SECONDS_BETWEEN_ACTIONS = 0.1
 local CELL = 2 -- Path check grid, in studs
@@ -53,7 +52,7 @@ end
 local function Overlaps(position, footprint)
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = {wallsFolder, arena}
+	params.FilterDescendantsInstances = {wallsFolder, workspace:WaitForChild("Arena")}
 	local shrunk = Vector3.new(footprint.X - 0.2, 1, footprint.Z - 0.2) -- Touching edges is fine
 	local hits = workspace:GetPartBoundsInBox(CFrame.new(position.X, 1, position.Z), shrunk, params)
 	for _, hit in hits do
@@ -190,8 +189,14 @@ removePiece.OnServerEvent:Connect(function(player, part)
 	part:Destroy()
 end)
 
--- The neon maze turns into dark concrete when the fake victory starts
-ServerPhase.Changed:Connect(function(phase)
+ServerPhase.Changed:Connect(function(phase, _, isReset)
+	-- A new round from the start clears the arena
+	if isReset and (phase == "Menu" or phase == "RTS") then
+		wallsFolder:ClearAllChildren()
+		return
+	end
+
+	-- The neon maze turns into dark concrete when the fake victory starts
 	if phase ~= "FakeVictory" then return end
 	for _, part in wallsFolder:GetChildren() do
 		if part:IsA("BasePart") then

@@ -1,4 +1,5 @@
--- Draws the glowing light-blue grid on the RTS floor and removes it when the RTS phase ends
+-- Draws the glowing light-blue grid on the arena floor; it goes away when the building ends
+-- and comes back when a new round starts
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
@@ -9,8 +10,7 @@ local CELL = 8 -- Studs between grid lines
 local LINE_WIDTH = 0.15
 local LINE_COLOR = Color3.fromRGB(120, 200, 255)
 
-local gridFolder = Instance.new("Folder")
-gridFolder.Name = "ArenaGrid"
+local gridFolder = nil
 
 local function MakeLine(size, position)
 	local line = Instance.new("Part")
@@ -28,16 +28,35 @@ local function MakeLine(size, position)
 	line.Parent = gridFolder
 end
 
--- Covers the arena floor inside the border walls
-local halfX, halfZ = ArenaLayout.HALF_X, ArenaLayout.HALF_Z
-for x = -halfX, halfX, CELL do
-	MakeLine(Vector3.new(LINE_WIDTH, 0.05, halfZ * 2), Vector3.new(x, 0.03, 0))
-end
-for z = -halfZ, halfZ, CELL do
-	MakeLine(Vector3.new(halfX * 2, 0.05, LINE_WIDTH), Vector3.new(0, 0.03, z))
-end
-gridFolder.Parent = workspace
+local function BuildGrid()
+	if gridFolder then return end
+	gridFolder = Instance.new("Folder")
+	gridFolder.Name = "ArenaGrid"
 
-GameState.OnPhase(Phases.FakeVictory, function()
-	gridFolder:Destroy()
+	-- Covers the arena floor inside the border walls
+	local halfX, halfZ = ArenaLayout.HALF_X, ArenaLayout.HALF_Z
+	for x = -halfX, halfX, CELL do
+		MakeLine(Vector3.new(LINE_WIDTH, 0.05, halfZ * 2), Vector3.new(x, 0.03, 0))
+	end
+	for z = -halfZ, halfZ, CELL do
+		MakeLine(Vector3.new(halfX * 2, 0.05, LINE_WIDTH), Vector3.new(0, 0.03, z))
+	end
+	gridFolder.Parent = workspace
+end
+
+local function RemoveGrid()
+	if gridFolder then
+		gridFolder:Destroy()
+		gridFolder = nil
+	end
+end
+
+BuildGrid()
+
+GameState.OnPhase(Phases.FakeVictory, RemoveGrid)
+
+GameState.Resetting:Connect(function(target)
+	if GameState.IsFullReset(target) then
+		BuildGrid()
+	end
 end)

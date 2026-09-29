@@ -9,6 +9,7 @@ local camera = workspace.CurrentCamera
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local BuildPieces = require(ReplicatedStorage:WaitForChild("BuildPieces"))
 local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
+local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local placePieceRemote = remotes:WaitForChild("PlacePiece")
 local removePieceRemote = remotes:WaitForChild("RemovePiece")
@@ -212,6 +213,7 @@ toast.TextStrokeTransparency = 0.3
 toast.Visible = false
 local toastToken = 0
 local function ShowToast(text)
+	SoundFx.Play("Refused", {volume = 0.4, speed = 0.7})
 	toastToken += 1
 	local token = toastToken
 	toast.Text = text
@@ -309,6 +311,7 @@ local function SetMode(newMode)
 end
 
 local function SelectOption(index)
+	SoundFx.Play("UiClick", {volume = 0.3})
 	selectedOptionIndex = index
 	SetMode(MODE_BUILD)
 end
@@ -338,7 +341,12 @@ for index, slot in slots do
 end
 
 wallsFolder.ChildAdded:Connect(UpdateBudget)
-wallsFolder.ChildRemoved:Connect(UpdateBudget)
+wallsFolder.ChildRemoved:Connect(function(part)
+	UpdateBudget()
+	if part.Name ~= "GhostPreview" and GameState.Is(GameState.Phases.RTS) then
+		SoundFx.Play("PieceRemoved", {volume = 0.5})
+	end
+end)
 RefreshMenu()
 
 -------------------------------------------------------------------------
@@ -484,6 +492,7 @@ end
 -- New pieces pop into place
 wallsFolder.ChildAdded:Connect(function(part)
 	if not part:IsA("BasePart") or part == previewPart or part.Name == "GhostPreview" then return end
+	SoundFx.Play("PiecePlaced", {volume = 0.5, speed = 0.9 + math.random() * 0.2})
 	local fullSize = part.Size
 	part.Size = fullSize * Vector3.new(0.6, 0.2, 0.6)
 	TweenService:Create(part, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = fullSize}):Play()
@@ -551,14 +560,26 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
--- The RTS phase is over: hide the build UI (the server turns the walls into concrete)
-GameState.OnPhase(GameState.Phases.FakeVictory, function()
-	gui.Enabled = false
+-- The build UI only shows while building (not in the main menu, not after the twist)
+local function LeaveBuilding()
 	mode = MODE_OFF
-	highlight:Destroy()
-
+	highlight.Parent = nil
 	if previewPart then
 		previewPart:Destroy()
 		previewPart = nil
 	end
+end
+
+gui.Enabled = GameState.Is(GameState.Phases.RTS)
+
+GameState.Changed:Connect(function(newPhase)
+	gui.Enabled = newPhase == GameState.Phases.RTS
+	if newPhase == GameState.Phases.RTS then
+		RefreshMenu()
+		UpdateCoreHud()
+	else
+		LeaveBuilding()
+	end
 end)
+
+GameState.Resetting:Connect(LeaveBuilding)

@@ -1,55 +1,75 @@
 # Build a Wall: "Winning Is Just The Beginning!"
 
-A Roblox game that starts as a top-down RTS maze puzzle and flips into first-person survival horror.
+A Roblox game that looks like a cute top-down maze builder and flips into first-person survival horror.
 
 ## Working rules
 
 - Vili said to stop asking before each plan step: build the step, playtest it, then commit it to `main` and push.
 - Vili writes in Finnish; reply in Finnish. All in-game text, UI and console output must be in English.
 - Write new code comments in English (older comments are still Finnish).
+- Protect the twist: the main menu, how-to-play card, icon and description must read like a cheerful building game.
 
 ## Repo and sync
 
 - Rojo 7.7 project managed with Rokit (`rokit.toml`). Mapping lives in `default.project.json`.
 - Sync to Studio: `rojo serve`, then Connect in the Rojo plugin. Build a place file with `rojo build -o build-a-wall.rbxlx`.
-- Scripts are plain `.luau` files. `RTSGui` is a text folder (`src/StarterGui/RTSGui/`). `Baseplate`, `EntitySpawn`, `EnemyCore` and `SpawnLocation` are `.model.json` files. `Hunter`, `Camera` and `Terrain` are still binary `.rbxm` files, so edit those in Studio.
+- Scripts are plain `.luau` files. `RTSGui` is a text folder (`src/StarterGui/RTSGui/`). `Baseplate`, `EntitySpawn`, `EnemyCore` and `SpawnLocation` are `.model.json` files. `Hunter`, `Camera` and `Terrain` are still binary `.rbxm` files, so edit those in Studio. Every other screen is built in code by its script.
+- The project uses the new input action system (`PlayerScriptsUseInputActionSystem`), so there is no `PlayerModule`; freezing the character relies on `WalkSpeed = 0`.
 
 ## Core loop
 
-1. **RTS phase (build and route).** Top-down camera. The player builds neon blocks on a 2-stud grid. Cyan `EnergyOrb's spawn at `EntitySpawn` every 3 seconds and bounce off walls (custom raycast reflection, like billiard balls) toward the red `EnemyCore`.
-2. **The twist.** After 5 core hits the game shows a fake victory, the world goes dark, and the player is teleported to `EntitySpawn` in first person with a flashlight.
-3. **Horror phase (survive and escape).** Neon walls turn to dark concrete. The `Hunter` chases the player with `PathfindingService` and kills on touch. Reaching the green escape zone at the core's location gives True Victory.
+1. **Menu.** Cheerful main menu over a slow camera sweep of the arena; orbs already bounce around behind it.
+2. **RTS (build and route).** Top-down camera over a walled 128x192 arena with a prebuilt zig-zag maze. Cyan orbs fly out of the `EntitySpawn` pad every 2.5 s and bounce off walls like billiard balls. The player places up to 30 pieces to steer them into the red `EnemyCore`.
+3. **Fake victory (the twist).** After 5 core hits: hard cut to first person in a dark concrete room with a ceiling and pulsing red alarms, a flashlight in hand, glitching "LEVEL CLEARED" and "- ERROR: BREACH DETECTED -", siren.
+4. **Horror (survive and escape).** Thick fog, narrow flickering flashlight, heartbeat. The black `Hunter` with red eyes waits in its lair behind the core, creeps towards the player, then chases when it sees them. 3 lives. Reaching the green escape zone where the core was gives `TrueVictory`; losing all lives gives `GameOver`.
+5. **End screens.** True victory: PLAY AGAIN (build a new maze) or MAIN MENU. Game over: TRY AGAIN (same maze, escape again) or MAIN MENU. All restarts happen in place (no teleport), so they work in Studio too.
 
-## What exists today
+## How the code is organised
 
-The client runs the game; the server owns the maze walls and the Hunter so pathfinding and physics work. The client phase lives in the `GameState` ModuleScript (`src/ReplicatedStorage/GameState.luau`): `RTS` -> `FakeVictory` -> `Horror` -> `TrueVictory` (or `GameOver` when out of lives). Scripts use `GameState.Is(phase)`, `GameState.OnPhase(phase, fn)` and `GameState.Changed`; only `GameManager` calls `GameState.Set`, and it reports every change to the server through the `Remotes.PhaseReport` RemoteEvent. The server keeps its copy in the `ServerPhase` ModuleScript (`src/ServerScriptService/ServerPhase.luau`), which only accepts forward moves.
+The client runs the game flow; the server owns the arena, the maze pieces, the Hunter, records and badges.
 
-| Script | Location | Does |
-|---|---|---|
-| `CameraManager` | `src/StarterPlayer/StarterPlayerScripts/CameraManager.client.luau` | Scriptable top-down camera: WASD or one-finger drag to move, mouse wheel or pinch to zoom (height 30 to 140), kept inside the arena. The default movement controls (keyboard and mobile thumbstick) are disabled except in `Horror`; character frozen. On `FakeVictory`: `LockFirstPerson`, `CameraType.Custom`, still frozen. On `Horror`: walking restored. Reapplies the phase rules on respawn. |
-| `EntitySpawner` | `src/StarterPlayer/StarterPlayerScripts/EntitySpawner.client.luau` | Spawns orbs every 3 s into the `EnergyOrbs` folder, raycast bounce (ignores other orbs and the build preview), destroys orbs more than 250 studs from the spawn or older than 60 s, fires `CoreHitEvent` on core hit. Raycasts only include `RTSWalls`, `Arena` and `EnemyCore`. When the phase leaves `RTS`: stops spawning and destroys all orbs. |
-| `GameManager` | `src/StarterPlayer/StarterPlayerScripts/GameManager.client.luau` | Counts core hits (goal 5), then sets `FakeVictory`: hides the core, teleports the player onto `EntitySpawn` facing the maze, and after 5 s sets `Horror`. On `Horror`: builds the `EscapeZone` folder (flat 16x16 green neon pad with a strong green PointLight and broken concrete pillars) where the core was, and sets `TrueVictory` when the living player stands within 8 studs of its centre. 3 lives (`LivesLeft` player attribute): each death in `Horror` costs one, the last sets `GameOver`. Respawns during `Horror` start on the spawn pad. `TrueVictory` freezes the player. |
-| `ArenaGrid` | `src/StarterPlayer/StarterPlayerScripts/ArenaGrid.client.luau` | Builds the glowing light-blue floor grid (neon strips every 8 studs, `CanQuery = false`) in an `ArenaGrid` folder. On `FakeVictory`: removes it. |
-| `PhaseEffects` | `src/StarterPlayer/StarterPlayerScripts/PhaseEffects.client.luau` | Owns lighting and fog. On `FakeVictory`: night lighting, concrete floor, dimmed spawn pad, a concrete ceiling on top of the walls (`ConcreteRoom` folder) with a grid of pulsing red alarm lights. On `Horror`: alarms go dark and the `Atmosphere` turns into thick dark fog that thins to about half within 45 studs of the escape zone. On `TrueVictory`: fog lifts and a cold dawn light fades in. |
-| `EndScreens` | `src/StarterPlayer/StarterPlayerScripts/EndScreens.client.luau` | Lives counter during `Horror`. On `TrueVictory` ("TRUE VICTORY: YOU SURVIVED") or `GameOver` ("THE HUNTER GOT YOU"): calm fade-in screen with time in the dark, deaths and a PLAY AGAIN button that fires `Remotes.PlayAgain`. |
-| `Flashlight` | `src/StarterPlayer/StarterPlayerScripts/Flashlight.client.luau` | From `FakeVictory` on: a first-person hand holding a flashlight (`FlashlightViewmodel` model in Workspace, follows the camera, bobs when walking). The beam is wide in `FakeVictory`, narrow and dim in `Horror`. |
-| `FakeVictoryGui` | `src/StarterPlayer/StarterPlayerScripts/FakeVictoryGui.client.luau` | During `FakeVictory`: black cut-in, glitching "LEVEL CLEARED" (red/cyan split, corrupted letters, getting worse), then a blinking red "- ERROR: BREACH DETECTED -". Removed when the phase ends. |
-| `ArenaService` (server) | `src/ServerScriptService/ArenaService.server.luau` | Builds the `Arena` folder from `ArenaLayout`: `Border` walls around the 128x192 play area and the prebuilt `Maze` (dark steel walls with a thin pale neon line on top). On `FakeVictory`: turns them into concrete. |
-| `WallService` (server) | `src/ServerScriptService/WallService.server.luau` | Owns the `RTSWalls` folder. Handles `Remotes.PlacePiece` (piece index, position, rotation) and `Remotes.RemovePiece` (part). Placement rules: RTS phase only, rate limit, 30-piece budget, inside the arena, 90° rotations, no overlap with pieces or arena walls, keep-clear radius around the spawn pad and core, and a flood fill on a 2-stud grid that refuses any Wall/Tower that would cut the walking route from the spawn to the core (Floor Obstacles can be jumped). Refusals go back to the client as a message on `PlacePiece`. On `FakeVictory`: turns every piece into dark grey concrete. |
-| `HunterAI` (server) | `src/ServerScriptService/HunterAI.server.luau` | Paints the `Hunter` rig black with glowing red eyes, plays its walk/idle animations from the server (the rig's Animate LocalScript never ran), and hides it in ServerStorage. On `Horror`: puts it in a free spot 14 studs behind the core, walks at 13 (player 16), goes straight at the player with line of sight and otherwise follows `PathfindingService` waypoints, kills on touch. After a player respawn it returns to its lair and waits 3 s. On `TrueVictory`: stops. |
-| `RestartService` (server) | `src/ServerScriptService/RestartService.server.luau` | Handles `Remotes.PlayAgain` after the game ended: teleports the player to a fresh reserved server of this place. Teleports fail in Studio, so the client then says to stop and press Play. |
-| `BuilderScript` | `src/StarterGui/RTSGui/BuilderScript.client.luau` | Builds the neon build menu in code (bottom `BuildBar` with a BUILD toggle, Wall/Tower/Floor Obstacle slots, ROTATE and REMOVE buttons, piece budget, controls hint, refusal message, top `CoreHud` with core-hit pips read from `EnemyCore` attributes `Hits`/`HitsRequired`). B toggles build mode, X toggles remove mode (highlights the piece under the pointer), right-click removes a piece, on touch a short tap places or removes, new pieces pop in, clicks on the menu never place pieces, 2-stud grid snap, `GhostPreview` part (`CanQuery = false`), R rotates 90°, keys 1/2/3 pick the pieces from `BuildPieces`. The preview turns red where the server would refuse the piece (except the route check, which only the server does); a click fires `Remotes.PlacePiece`. Uses the server's `RTSWalls` folder as the mouse `TargetFilter`. On `FakeVictory`: hides the GUI. |
+- **Client phase:** `GameState` ModuleScript (`src/ReplicatedStorage/GameState.luau`): `Menu` -> `RTS` -> `FakeVictory` -> `Horror` -> `TrueVictory` or `GameOver`. Scripts use `GameState.Is`, `GameState.OnPhase(phase, fn)` and `GameState.Changed` (listeners run in their own thread, in connect order). `MainMenu` sets `RTS`; `GameManager` sets the rest and reports every change to the server with `Remotes.PhaseReport`.
+- **Round resets:** the end screens fire `Remotes.RestartRequest` (`Retry`, `PlayAgain`, `MainMenu`). `RestartService` resets the server (`ServerPhase.Reset`), tells the client with `Remotes.RoundReset`, then reloads the character. The client calls `GameState.Reset(target)`: `GameState.Resetting` listeners clean up first (must not wait), then `Changed` fires. `GameState.IsFullReset(target)` is true for `Menu` and `RTS` (new maze); `Horror` is the retry. Every script that changes the world handles `Resetting`.
+- **Server phase:** `ServerPhase` ModuleScript (`src/ServerScriptService/ServerPhase.luau`) follows the client reports (forward only) and `Changed` fires with `(phase, player, isReset)`.
 
-Other instances:
-- `ReplicatedStorage`: `GameState`, `BuildPieces` (pieces, budget and placement limits) and `ArenaLayout` (arena size, maze rectangles, spawn and core positions) ModuleScripts shared by client and server, the `CoreHitEvent` BindableEvent, and the `Remotes` folder (`PlacePiece`, `RemovePiece`, `PhaseReport`, `PlayAgain` RemoteEvents).
-- `Workspace`: `Baseplate` (dark blue), `EntitySpawn` (flat blue neon pad with an "S" SurfaceGui, at z = 70), `EnemyCore` (16-stud red neon sphere with a red PointLight, at z = -70; `ArenaLayout` must match both), `Hunter` (R15 rig, moved to ServerStorage by `HunterAI` until the horror), `SpawnLocation` (invisible, out of view at z = 120 so the frozen character is off camera during RTS).
-- `StarterGui`: `RTSGui` (`ResetOnSpawn = false`). The phase screens are built in code by their scripts.
-- `Lighting`: one `Sky`, one `Atmosphere`, and the post effects (Bloom, Blur, ColorCorrection, SunRays, DepthOfField).
+### Client scripts (`src/StarterPlayer/StarterPlayerScripts/` unless noted)
 
-## Target design (not built yet)
+| Script | Does |
+|---|---|
+| `MainMenu` | Main menu (FredokaOne title, PLAY, HOW TO PLAY, flashing lights notice), the how-to-play card that also opens for 9 s at the start of every round, and floating "ENEMY CORE" / "ORBS START HERE" labels during `RTS`. |
+| `CameraManager` | Menu: slow sweep. RTS: top-down, WASD or one-finger drag, wheel or pinch zoom (height 30 to 140), kept inside the arena. FakeVictory/Horror: `LockFirstPerson`, facing the maze; walking only in `Horror`. TrueVictory/GameOver: holds the last view and frees the mouse for the end screen buttons. |
+| `GameManager` | Counts core hits (5) with flash, shake and sound. FakeVictory: hides the core, teleports the player onto the spawn pad facing the maze, `Horror` after 5 s. Horror: builds the `EscapeZone` folder (flat green pad, strong light, broken pillars) and sets `TrueVictory` when the player stands within 8 studs of its centre. 3 lives (`LivesLeft` attribute). Listens for `RoundReset`. |
+| `EntitySpawner` | Orbs in `Menu` and `RTS` (`EnergyOrbs` folder), raycast bounce against `RTSWalls`, `Arena` and `EnemyCore` only, spark and ping on each bounce, `CoreHitEvent` on a core hit, removed after 90 s. |
+| `ArenaGrid` | Glowing floor grid inside the arena (`CanQuery = false`), removed at `FakeVictory`, rebuilt on a new round. |
+| `PhaseEffects` | Lighting and fog. FakeVictory: night, concrete floor, dimmed spawn pad, `ConcreteRoom` ceiling with pulsing red alarms. Horror: alarms off, thick dark `Atmosphere` fog that thins near the escape zone. TrueVictory: fog lifts. A new round restores the start look. |
+| `Flashlight` | First-person hand with a flashlight (`FlashlightViewmodel` in Workspace; lights under the Camera do not render). Wide beam in `FakeVictory`, narrow and dim in `Horror`, flickers now and then and a lot when the Hunter is within 35 studs. |
+| `FakeVictoryGui` | Black cut-in, glitching "LEVEL CLEARED" that gets worse, blinking red "- ERROR: BREACH DETECTED -". |
+| `EndScreens` | Lives counter in `Horror`; victory and game over screens with escape time, best time, deaths, new-record line and the two buttons. |
+| `AudioDirector` | Music and ambience per phase (see `SoundFx`): building music, hard cut + glitch + siren at the twist, drone music and a heartbeat that speeds up as the Hunter gets close, growl at game over. |
+| `RTSGui/BuilderScript` (`src/StarterGui/RTSGui/`) | Neon build bar (BUILD toggle, Wall/Tower/Floor Obstacle, ROTATE, REMOVE, piece budget, hints, refusal message) and the top core-hit HUD. B build mode, X remove mode, R rotate, 1/2/3 pieces, right-click removes, touch tap places/removes. Red preview where placing is refused; pieces pop in with a sound. Only visible in `RTS`. |
 
-- Optional later: move the rest of the game logic (orbs, core hits, phases) to the server.
+### Server scripts (`src/ServerScriptService/`)
+
+| Script | Does |
+|---|---|
+| `ArenaService` | Builds the `Arena` folder (border walls and prebuilt maze from `ArenaLayout`, dark steel with a pale neon line). Concrete at `FakeVictory`; rebuilt (same folder) on a new round. |
+| `WallService` | Owns `RTSWalls`. `PlacePiece` / `RemovePiece` with rate limit, 30-piece budget, arena bounds, 90° rotations, no overlaps, keep-clear radius around the spawn pad and core, and a flood fill that refuses any Wall/Tower that would cut the route from the spawn to the core. Refusal messages go back on `PlacePiece`. Concrete at `FakeVictory`; cleared on a new round. |
+| `HunterAI` | Black rig with red eyes, walk/idle animations from the server, hidden in ServerStorage outside the horror. Horror: lair 14 studs behind the core, waits 6 s, creeps at 55% speed towards a spot near the player, chases (growl) when it sees the player within 28 studs or is within 14, loses track after 5 s. Speed 11 + 0.8 per past escape (`Wins`), max 15 (player 16). Footstep sounds, kill on touch, back to the lair with 3 s grace after a death. Hunt loops use a generation counter so a retry never runs two. |
+| `RestartService` | Handles `RestartRequest` as described above. |
+| `RecordService` | DataStore `EscapeRecords_v1`: best escape time and escape count per player (attributes `Wins`, `BestEscape`, `LastEscape`, `NewRecord`). Awards badges. DataStores only work in a published place (Studio also needs API access enabled). |
+| `BadgeIds` | Badge ids (`LevelCleared`, `Escaped`, `Flawless`); 0 means not created yet and is skipped. |
+
+### Shared modules (`src/ReplicatedStorage/`)
+
+`GameState`, `BuildPieces` (pieces, budget, keep-clear radius, footprint helper), `ArenaLayout` (arena size, maze rectangles, spawn and core positions; must match `EntitySpawn` at z = 70 and `EnemyCore` at z = -70), `SoundFx` (every sound id in one place plus `Play`/`Loop` helpers; only Roblox-licensed APM music, Pro Sound Effects and built-in `rbxasset://sounds`), the `CoreHitEvent` BindableEvent and the `Remotes` folder (`PlacePiece`, `RemovePiece`, `PhaseReport`, `RestartRequest`, `RoundReset`).
+
+## Publishing checklist (Vili, on the Creator Dashboard)
+
+- Server size 1 (Places > Configure > Server Size), since the game is single-player.
+- Maturity & Compliance questionnaire (horror, jump scare, flashing lights).
+- Create the badges and paste their ids into `BadgeIds`.
+- Enable Studio access to API services to test records in Studio.
 
 ## Testing
 
-Play in Studio: build walls, check that orbs route into the core, check the switch to the horror phase after 5 hits (darkness, FPS, flashlight, Hunter chasing), die once to check respawn keeps FPS and flashlight, then reach the escape pad and check True Victory.
+Play in Studio: menu, PLAY, build and route orbs into the core, fake victory, horror (fog, flashlight, Hunter creeping then chasing), die 3 times for game over and TRY AGAIN, escape for true victory, PLAY AGAIN and MAIN MENU. Studio's viewport capture sometimes shows white; UI still renders.
