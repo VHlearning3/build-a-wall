@@ -6,8 +6,8 @@ local BuildPieces = {
 	Pieces = {
 		{name = "Wall", size = Vector3.new(12, 10, 2), color = BrickColor.new("Neon orange"), key = Enum.KeyCode.One, blocksWalking = true},
 		{name = "Tower", size = Vector3.new(4, 10, 4), color = BrickColor.new("Cyan"), key = Enum.KeyCode.Two, blocksWalking = true},
-		-- A round bumper: orbs that bounce off it get a speed boost (EntitySpawner)
-		{name = "Booster", size = Vector3.new(6, 6, 6), shape = Enum.PartType.Ball, color = BrickColor.new("Magenta"), key = Enum.KeyCode.Three, blocksWalking = true},
+		-- A round bumper: orbs that bounce off it get a speed boost and turn pink (EntitySpawner)
+		{name = "Booster", size = Vector3.new(6, 6, 6), shape = Enum.PartType.Ball, color = BrickColor.new("Lime green"), key = Enum.KeyCode.Three, blocksWalking = true},
 	},
 }
 

@@ -5,6 +5,7 @@ local workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 local Phases = GameState.Phases
 
@@ -14,8 +15,8 @@ local coreHitEvent = ReplicatedStorage:WaitForChild("CoreHitEvent") -- Uusi sign
 local entities = {}
 local moveSpeed = 20
 local entitySize = 5 -- Kasvatettu koko (oli 3)
-local maxDistance = 250 -- Orbs farther than this from the spawn are destroyed
-local maxLifetime = 90 -- Seconds before a stuck orb is destroyed
+local MENU_MAX_ORBS = 6 -- Just a few orbs behind the main menu
+local maxLifetime = 150 -- Seconds before a stuck orb is destroyed (long levels need time)
 local BOOST_SECONDS = 3 -- Bouncing off a Booster makes an orb fast for this long (a new bounce starts it again)
 local BOOST_SPEED_FACTOR = 2
 local ORB_COLOR = BrickColor.new("Cyan")
@@ -86,7 +87,8 @@ end
 
 task.spawn(function()
 	while true do
-		if IsActive() then
+		local menuFull = GameState.Is(Phases.Menu) and #orbsFolder:GetChildren() >= MENU_MAX_ORBS
+		if IsActive() and not menuFull then
 			SpawnEntity()
 		end
 		task.wait(2.5)
@@ -99,9 +101,9 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	for i, entityData in pairs(entities) do
 		local orb = entityData.model
 		if orb and orb.Parent then
-			-- Destroy escaped or stuck orbs
-			local distance = (orb.Position - spawnPoint.Position).Magnitude
-			if distance > maxDistance or os.clock() - entityData.born > maxLifetime then
+			-- Destroy orbs that got outside the arena (should not happen) or are stuck
+			local outside = math.abs(orb.Position.X) > ArenaLayout.HALF_X + 10 or math.abs(orb.Position.Z) > ArenaLayout.HALF_Z + 10
+			if outside or os.clock() - entityData.born > maxLifetime then
 				orb:Destroy()
 				entities[i] = nil
 				continue
@@ -150,10 +152,12 @@ local function ClearOrbs()
 	entities = {}
 end
 
--- Orbs vanish when the building ends, and a new round starts with a clean arena
-GameState.Changed:Connect(function(newPhase, oldPhase)
-	if newPhase ~= Phases.RTS or oldPhase ~= Phases.Menu then
-		ClearOrbs()
+-- Every round starts with an empty arena and the first orb right away; orbs vanish when the building ends
+GameState.Changed:Connect(function(newPhase)
+	ClearOrbs()
+	if newPhase == Phases.RTS then
+		SpawnEntity()
 	end
 end)
 GameState.Resetting:Connect(ClearOrbs)
+workspace:GetAttributeChangedSignal("Level"):Connect(ClearOrbs)
