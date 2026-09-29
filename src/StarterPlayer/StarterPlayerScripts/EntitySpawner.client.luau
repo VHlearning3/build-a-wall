@@ -15,14 +15,18 @@ local entitySize = 5 -- Kasvatettu koko (oli 3)
 local maxDistance = 250 -- Orbs farther than this from the spawn are destroyed
 local maxLifetime = 60 -- Seconds before a stuck orb is destroyed
 
--- Orbs live in their own folder so they do not bounce off each other
 local orbsFolder = Instance.new("Folder")
 orbsFolder.Name = "EnergyOrbs"
 orbsFolder.Parent = workspace
 
+-- Orbs only bounce off the player's pieces (and the maze border) and only score on the core;
+-- everything else (other orbs, the frozen character, the hidden SpawnLocation) is ignored
 local raycastParams = RaycastParams.new()
-raycastParams.FilterDescendantsInstances = {orbsFolder, spawnPoint}
-raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+raycastParams.FilterDescendantsInstances = {
+	workspace:WaitForChild("RTSWalls"),
+	workspace:WaitForChild("EnemyCore"),
+}
+raycastParams.FilterType = Enum.RaycastFilterType.Include
 
 local function SpawnEntity()
 	local orb = Instance.new("Part")

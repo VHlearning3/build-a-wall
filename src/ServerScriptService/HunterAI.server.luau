@@ -266,9 +266,9 @@ ServerPhase.Changed:Connect(function(phase)
 		hunting = true
 		print("The Hunter is loose...")
 		task.spawn(ChaseLoop)
-	elseif phase == "TrueVictory" then
+	elseif phase == "TrueVictory" or phase == "GameOver" then
 		hunting = false
-		print("The Hunter stops. The player escaped.")
+		print("The Hunter stops. The game is over.")
 	end
 end)
 

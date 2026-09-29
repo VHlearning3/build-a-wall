@@ -1,4 +1,5 @@
--- World look per phase: the concrete room with red ceiling alarms in the fake victory
+-- World look per phase: the concrete room with red ceiling alarms in the fake victory,
+-- thick fog in the horror that thins near the escape zone, and the fog lifting at the true victory
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
@@ -6,8 +7,17 @@ local RunService = game:GetService("RunService")
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local Phases = GameState.Phases
 
+local TweenService = game:GetService("TweenService")
+
 local baseplate = workspace:WaitForChild("Baseplate")
 local entitySpawn = workspace:WaitForChild("EntitySpawn")
+local core = workspace:WaitForChild("EnemyCore")
+local player = game:GetService("Players").LocalPlayer
+
+local HORROR_FOG_DENSITY = 0.75
+local CLEAR_FOG_DENSITY = 0.3 -- Right next to the escape zone
+local FOG_CLEAR_START = 45 -- Fog starts thinning this far from the escape zone
+local FOG_CLEAR_END = 10 -- ...and is thinnest this close
 
 local ROOM_HALF_EXTENT = 160 -- Same area as the RTS grid
 local CEILING_Y = 10.5 -- Walls are 10 studs tall, so the ceiling sits right on top of them
@@ -129,4 +139,35 @@ GameState.OnPhase(Phases.Horror, function()
 		atmosphere.Glare = 0
 		atmosphere.Haze = 3
 	end
+
+	-- The fog thins as the player gets close to the escape zone
+	local escapeCenter = Vector3.new(core.Position.X, 0, core.Position.Z)
+	local fogConnection
+	fogConnection = RunService.RenderStepped:Connect(function()
+		if not GameState.Is(Phases.Horror) then
+			fogConnection:Disconnect()
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not root or not atmosphere then return end
+
+		local distance = (Vector3.new(root.Position.X, 0, root.Position.Z) - escapeCenter).Magnitude
+		local closeness = math.clamp((FOG_CLEAR_START - distance) / (FOG_CLEAR_START - FOG_CLEAR_END), 0, 1)
+		atmosphere.Density = HORROR_FOG_DENSITY + (CLEAR_FOG_DENSITY - HORROR_FOG_DENSITY) * closeness
+	end)
+end)
+
+-- True victory: the fog lifts and a cold dawn light comes up
+GameState.OnPhase(Phases.TrueVictory, function()
+	local liftInfo = TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+	if atmosphere then
+		TweenService:Create(atmosphere, liftInfo, {Density = 0.1, Haze = 0.5}):Play()
+	end
+	TweenService:Create(Lighting, liftInfo, {
+		OutdoorAmbient = Color3.fromRGB(70, 85, 75),
+		Ambient = Color3.fromRGB(35, 45, 40),
+		FogEnd = 400,
+	}):Play()
 end)

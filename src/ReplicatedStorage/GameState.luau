@@ -1,4 +1,4 @@
--- Shared game phase for all client scripts: RTS -> FakeVictory -> Horror -> TrueVictory
+-- Shared game phase for all client scripts: RTS -> FakeVictory -> Horror -> TrueVictory (or GameOver)
 local GameState = {}
 
 GameState.Phases = {
@@ -6,6 +6,7 @@ GameState.Phases = {
 	FakeVictory = "FakeVictory",
 	Horror = "Horror",
 	TrueVictory = "TrueVictory",
+	GameOver = "GameOver", -- Out of lives in the horror
 }
 
 local current = GameState.Phases.RTS

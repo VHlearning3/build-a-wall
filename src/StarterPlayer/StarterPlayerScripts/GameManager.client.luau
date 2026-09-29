@@ -1,6 +1,7 @@
 -- Game director: moves the game through RTS -> FakeVictory -> Horror -> TrueVictory
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local Phases = GameState.Phases
@@ -80,53 +81,139 @@ GameState.OnPhase(Phases.FakeVictory, function()
 end)
 
 -------------------------------------------------------------------------
--- HORROR: escape pad at the core (lighting lives in PhaseEffects, flashlight in Flashlight)
+-- HORROR: a flat green EscapeZone over the ruins of the core
+-- (lighting lives in PhaseEffects, the flashlight in Flashlight)
 -------------------------------------------------------------------------
-GameState.OnPhase(Phases.Horror, function()
-	-- Escape pad at the core (step 6 replaces this with a separate EscapeZone)
-	core.Transparency = 0
-	core.Size = Vector3.new(20, 1, 20)
-	core.Position = Vector3.new(core.Position.X, 0.5, core.Position.Z)
-	core.BrickColor = BrickColor.new("Lime green")
-	core.Material = Enum.Material.Neon
+local ESCAPE_SIZE = 16
+local ESCAPE_REACH = ESCAPE_SIZE / 2 -- Standing this close to the centre (flat distance) counts as escaped
+local ESCAPE_COLOR = Color3.fromRGB(60, 255, 90)
 
-	local escapeLight = Instance.new("PointLight")
-	escapeLight.Color = Color3.fromRGB(0, 255, 0)
-	escapeLight.Range = 40
-	escapeLight.Brightness = 3
-	escapeLight.Parent = core
+local escapeCenter = Vector3.new(core.Position.X, 0, core.Position.Z)
+local victoryConnection = nil
+
+local function BuildEscapeZone()
+	local folder = Instance.new("Folder")
+	folder.Name = "EscapeZone"
+
+	local pad = Instance.new("Part")
+	pad.Name = "EscapePad"
+	pad.Anchored = true
+	pad.CanCollide = false
+	pad.CanQuery = false
+	pad.CastShadow = false
+	pad.Material = Enum.Material.Neon
+	pad.Color = ESCAPE_COLOR
+	pad.Transparency = 0.15
+	pad.Size = Vector3.new(ESCAPE_SIZE, 0.2, ESCAPE_SIZE)
+	pad.Position = escapeCenter + Vector3.new(0, 0.1, 0)
+	pad.Parent = folder
+
+	local light = Instance.new("PointLight")
+	light.Name = "EscapeLight"
+	light.Color = ESCAPE_COLOR
+	light.Range = 55
+	light.Brightness = 5
+	light.Shadows = true
+	light.Parent = pad
+
+	-- Broken concrete pillars: what is left of the core
+	local pillars = {
+		{Vector3.new(-5, 0, -4), 3.5, 12},
+		{Vector3.new(4, 0, -5), 2.2, -20},
+		{Vector3.new(5.5, 0, 3.5), 4.2, 8},
+		{Vector3.new(-4.5, 0, 5), 1.6, -35},
+	}
+	for index, pillar in pillars do
+		local offset, height, tilt = pillar[1], pillar[2], pillar[3]
+		local ruin = Instance.new("Part")
+		ruin.Name = "Ruin" .. index
+		ruin.Shape = Enum.PartType.Cylinder
+		ruin.Anchored = true
+		ruin.CanCollide = false -- Never blocks the way out
+		ruin.CanQuery = false
+		ruin.Material = Enum.Material.Concrete
+		ruin.Color = Color3.fromRGB(70, 70, 72)
+		ruin.Size = Vector3.new(height, 1.6, 1.6)
+		ruin.CFrame = CFrame.new(escapeCenter + offset + Vector3.new(0, height / 2, 0))
+			* CFrame.Angles(0, math.rad(tilt * 3), math.rad(90 + tilt))
+		ruin.Parent = folder
+	end
+
+	folder.Parent = workspace
+	return folder
+end
+
+GameState.OnPhase(Phases.Horror, function()
+	BuildEscapeZone()
+
+	-- Escaped when the player stands on the zone (checked every frame, more reliable than Touched)
+	victoryConnection = RunService.Heartbeat:Connect(function()
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not root or not humanoid or humanoid.Health <= 0 then return end
+
+		local flat = Vector3.new(root.Position.X, 0, root.Position.Z)
+		if (flat - escapeCenter).Magnitude <= ESCAPE_REACH then
+			GameState.Set(Phases.TrueVictory)
+		end
+	end)
 end)
+
+-- Lives: every death in the horror costs one, the last one ends the game
+local LIVES = 3
+player:SetAttribute("LivesLeft", LIVES)
+
+GameState.OnPhase(Phases.Horror, function()
+	player:SetAttribute("HorrorStartTime", os.clock())
+end)
+
+local function WatchDeaths(character)
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if not humanoid then return end
+	humanoid.Died:Connect(function()
+		if not GameState.Is(Phases.Horror) then return end
+		local livesLeft = math.max((player:GetAttribute("LivesLeft") or LIVES) - 1, 0)
+		player:SetAttribute("LivesLeft", livesLeft)
+		if livesLeft == 0 then
+			GameState.Set(Phases.GameOver)
+		end
+	end)
+end
 
 -- Respawning during the horror starts again at the spawn pad
 player.CharacterAdded:Connect(function(newCharacter)
+	WatchDeaths(newCharacter)
 	if GameState.Is(Phases.Horror) then
 		TeleportToSpawn(newCharacter)
 	end
 end)
+if player.Character then
+	task.spawn(WatchDeaths, player.Character)
+end
 
--------------------------------------------------------------------------
--- TRUE VICTORY: player reaches the escape pad
--------------------------------------------------------------------------
-core.Touched:Connect(function(hit)
-	if not GameState.Is(Phases.Horror) then return end
-	if hit.Parent ~= player.Character then return end
-
-	local playerHumanoid = hit.Parent:FindFirstChild("Humanoid")
-	if playerHumanoid and playerHumanoid.Health > 0 then
-		GameState.Set(Phases.TrueVictory)
+GameState.OnPhase(Phases.GameOver, function()
+	if victoryConnection then
+		victoryConnection:Disconnect()
+		victoryConnection = nil
 	end
+	print("GAME OVER: The Hunter got you.")
 end)
 
+-------------------------------------------------------------------------
+-- TRUE VICTORY: the player made it out
+-------------------------------------------------------------------------
 GameState.OnPhase(Phases.TrueVictory, function()
+	if victoryConnection then
+		victoryConnection:Disconnect()
+		victoryConnection = nil
+	end
+
 	local character = player.Character
 	local humanoid = character and character:FindFirstChild("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = 0
-	end
-
-	local victoryGui = player:WaitForChild("PlayerGui"):FindFirstChild("VictoryGui")
-	if victoryGui then
-		victoryGui.Enabled = true
+		humanoid.JumpPower = 0
 	end
 	print("TRUE VICTORY: You survived your own maze!")
 end)
