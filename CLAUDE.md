@@ -12,7 +12,7 @@ A Roblox game that starts as a top-down RTS maze puzzle and flips into first-per
 
 - Rojo 7.7 project managed with Rokit (`rokit.toml`). Mapping lives in `default.project.json`.
 - Sync to Studio: `rojo serve`, then Connect in the Rojo plugin. Build a place file with `rojo build -o build-a-wall.rbxlx`.
-- Scripts are plain `.luau` files. `RTSGui` is a text folder (`src/StarterGui/RTSGui/`). `VictoryGui` and the Workspace parts are still binary `.rbxm` files, so edit those in Studio.
+- Scripts are plain `.luau` files. `RTSGui` is a text folder (`src/StarterGui/RTSGui/`). `Baseplate`, `EntitySpawn`, `EnemyCore` and `SpawnLocation` are `.model.json` files. `VictoryGui`, `Hunter`, `Camera` and `Terrain` are still binary `.rbxm` files, so edit those in Studio.
 
 ## Core loop
 
@@ -29,12 +29,13 @@ All gameplay code is client-side. There are no server scripts.
 | `CameraManager` | `src/StarterPlayer/StarterPlayerScripts/CameraManager.client.luau` | Scriptable top-down camera with WASD, character frozen. On `HorrorModeEvent`: `LockFirstPerson`, `CameraType.Custom`, walking restored. |
 | `EntitySpawner` | `src/StarterPlayer/StarterPlayerScripts/EntitySpawner.client.luau` | Spawns orbs every 3 s into the `EnergyOrbs` folder, raycast bounce (ignores other orbs and the build preview), destroys orbs more than 250 studs from the spawn or older than 60 s, fires `CoreHitEvent` on core hit. On `HorrorModeEvent`: destroys all orbs. |
 | `GameManager` | `src/StarterPlayer/StarterPlayerScripts/GameManager.client.luau` | Counts core hits (goal 5). Then: darkness (`Ambient`/`OutdoorAmbient` 0, `Brightness` 0, `ClockTime` 0), reshapes `EnemyCore` into a flat lime-green neon pad with a green PointLight, teleports player to `EntitySpawn`, adds a SpotLight flashlight on the head, fires `HorrorModeEvent`. Keeps FPS + flashlight on respawn. `EnemyCore.Touched` enables `VictoryGui`. |
+| `ArenaGrid` | `src/StarterPlayer/StarterPlayerScripts/ArenaGrid.client.luau` | Builds the glowing light-blue floor grid (neon strips every 8 studs, `CanQuery = false`) in an `ArenaGrid` folder. On `HorrorModeEvent`: removes it. |
 | `MonsterAI` | `src/StarterPlayer/StarterPlayerScripts/MonsterAI.client.luau` | Uses the existing `workspace.Hunter` rig. On `HorrorModeEvent`: recomputes a path to the player every 0.2 s, kills on touch. |
 | `BuilderScript` | `src/StarterGui/RTSGui/BuilderScript.client.luau` | Build mode toggle button, 2-stud grid snap, `GhostPreview` part (`CanQuery = false`), R rotates 90°, keys 1/2/3 pick Wall (orange) / Tower (cyan) / Floor Obstacle (magenta). Creates the `RTSWalls` folder at runtime and uses it as the mouse `TargetFilter`. On `HorrorModeEvent`: hides the GUI and turns walls into dark grey concrete. |
 
 Other instances:
 - `ReplicatedStorage`: BindableEvents `HorrorModeEvent` and `CoreHitEvent`.
-- `Workspace`: `Baseplate`, `EntitySpawn`, `EnemyCore` (red sphere), `Hunter` (rig).
+- `Workspace`: `Baseplate` (dark blue), `EntitySpawn` (flat blue neon pad with an "S" SurfaceGui), `EnemyCore` (16-stud red neon sphere with a red PointLight), `Hunter` (rig), `SpawnLocation` (invisible, out of view at z = 120 so the frozen character is off camera during RTS).
 - `StarterGui`: `RTSGui` (`ResetOnSpawn = false`), `VictoryGui` ("TRUE VICTORY" text, disabled until escape).
 - `Lighting`: one `Sky`, one `Atmosphere`, and the post effects (Bloom, Blur, ColorCorrection, SunRays, DepthOfField).
 

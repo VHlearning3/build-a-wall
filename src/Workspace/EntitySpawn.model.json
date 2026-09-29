@@ -1,0 +1,91 @@
+{
+  "className": "Part",
+  "properties": {
+    "CFrame": {
+      "CFrame": {
+        "position": [
+          2,
+          0.5,
+          28
+        ],
+        "orientation": [
+          [
+            0,
+            0,
+            -1
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "Anchored": true,
+    "CanCollide": false,
+    "Size": [
+      10,
+      1,
+      10
+    ],
+    "Color": [
+      0.1,
+      0.35,
+      1
+    ],
+    "Material": "Neon"
+  },
+  "children": [
+    {
+      "name": "SpawnLabel",
+      "className": "SurfaceGui",
+      "properties": {
+        "Face": "Top",
+        "SizingMode": "PixelsPerStud",
+        "PixelsPerStud": 10,
+        "LightInfluence": 0
+      },
+      "children": [
+        {
+          "name": "Letter",
+          "className": "TextLabel",
+          "properties": {
+            "Size": {
+              "UDim2": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "BackgroundTransparency": 1,
+            "Text": "S",
+            "TextScaled": true,
+            "TextColor3": [
+              1,
+              1,
+              1
+            ],
+            "FontFace": {
+              "Font": {
+                "family": "rbxasset://fonts/families/GothamSSm.json",
+                "weight": "Bold",
+                "style": "Normal"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

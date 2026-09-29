@@ -1,0 +1,13 @@
+{
+  "className": "SpawnLocation",
+  "properties": {
+    "Anchored": true,
+    "Neutral": true,
+    "Duration": 0,
+    "Size": [12, 1, 12],
+    "Position": [0, 0.5, 120],
+    "Transparency": 1,
+    "CanQuery": false,
+    "CastShadow": false
+  }
+}

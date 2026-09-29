@@ -1,0 +1,38 @@
+{
+  "className": "Part",
+  "properties": {
+    "Anchored": true,
+    "Shape": "Ball",
+    "Size": [
+      16,
+      16,
+      16
+    ],
+    "Color": [
+      1,
+      0,
+      0
+    ],
+    "Material": "Neon",
+    "Position": [
+      -2,
+      8,
+      -22
+    ]
+  },
+  "children": [
+    {
+      "name": "CoreGlow",
+      "className": "PointLight",
+      "properties": {
+        "Color": [
+          1,
+          0.15,
+          0.1
+        ],
+        "Range": 24,
+        "Brightness": 2
+      }
+    }
+  ]
+}
