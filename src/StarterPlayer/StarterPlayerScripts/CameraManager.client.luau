@@ -1,26 +1,44 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+
+local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local Phases = GameState.Phases
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
 -- Asetukset
-local isRTSMode = true
 local cameraSpeed = 40 -- Kuinka nopeasti RTS-kamera liikkuu
 local rtsCameraPosition = Vector3.new(0, 40, 40) -- Kameran aloituspaikka
 
--- Odotetaan, että hahmo on olemassa, jotta voimme pysäyttää sen
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+-- Movement per phase: frozen during RTS and the fake victory, free in the horror
+local function ApplyMovement(character)
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if not humanoid then return end
 
--- Pysäytetään hahmo RTS-vaiheen ajaksi asettamalla nopeudet nollaan
-humanoid.WalkSpeed = 0
-humanoid.JumpPower = 0
+	if GameState.Is(Phases.Horror) then
+		humanoid.WalkSpeed = 16
+		humanoid.JumpPower = 50
+	else
+		humanoid.WalkSpeed = 0
+		humanoid.JumpPower = 0
+	end
+end
+
+local function FollowCharacter(character)
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	player.CameraMode = Enum.CameraMode.LockFirstPerson
+	camera.CameraType = Enum.CameraType.Custom
+	if humanoid then
+		camera.CameraSubject = humanoid
+	end
+end
 
 -- Pääsilmukka RTS-kameran liikuttamiseen
 local function UpdateRTSCamera(deltaTime)
-	if not isRTSMode then return end
+	if not GameState.Is(Phases.RTS) then return end
 
 	-- Pakotetaan kamera Scriptable-tilaan
 	camera.CameraType = Enum.CameraType.Scriptable
@@ -44,36 +62,32 @@ local function UpdateRTSCamera(deltaTime)
 	camera.CFrame = CFrame.new(rtsCameraPosition) * CFrame.Angles(math.rad(-90), 0, 0)
 end
 
--- Sidotaan kameran päivitys jokaiseen renderöityvään frameen
 RunService.RenderStepped:Connect(UpdateRTSCamera)
 
--------------------------------------------------------------------------
--- TILA VAIHTUU KAUHUKSI
--------------------------------------------------------------------------
+-- Fake victory: snap into first person, still frozen
+GameState.OnPhase(Phases.FakeVictory, function()
+	local character = player.Character or player.CharacterAdded:Wait()
+	FollowCharacter(character)
+	ApplyMovement(character)
+end)
 
-local function TriggerHorrorMode()
-	if not isRTSMode then return end
-	isRTSMode = false
+-- Horror: first person and free to move
+GameState.OnPhase(Phases.Horror, function()
+	local character = player.Character or player.CharacterAdded:Wait()
+	FollowCharacter(character)
+	ApplyMovement(character)
+	print("CONTAINMENT BREACH: Horror mode activated!")
+end)
 
-	-- 1. Palautetaan hahmolle normaali liikkumisnopeus
-	humanoid.WalkSpeed = 16
-	humanoid.JumpPower = 50
-
-	-- 2. Pakotetaan pelaaja ensimmäiseen persoonaan (First-Person)
-	player.CameraMode = Enum.CameraMode.LockFirstPerson
-
-	-- 3. Palautetaan kamera seuraamaan pelaajan hahmoa
-	camera.CameraType = Enum.CameraType.Custom
-	camera.CameraSubject = humanoid
-
-	print("CONTAINMENT BREACH: Horror mode aktivoitu!")
+-- Respawns keep the rules of the current phase
+local function OnCharacter(character)
+	ApplyMovement(character)
+	if not GameState.Is(Phases.RTS) then
+		FollowCharacter(character)
+	end
 end
 
--------------------------------------------------------------------------
--- TESTAUS (Paina F-näppäintä vaihtaaksesi tilaa)
--------------------------------------------------------------------------
-
--- Kuunnellaan pelinjohtajan lähettämää signaalia
-game.ReplicatedStorage:WaitForChild("HorrorModeEvent").Event:Connect(function()
-	TriggerHorrorMode()
-end)
+player.CharacterAdded:Connect(OnCharacter)
+if player.Character then
+	task.spawn(OnCharacter, player.Character)
+end

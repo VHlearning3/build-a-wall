@@ -2,8 +2,10 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local workspace = game:GetService("Workspace")
 
+local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local Phases = GameState.Phases
+
 local spawnPoint = workspace:WaitForChild("EntitySpawn")
-local horrorEvent = ReplicatedStorage:WaitForChild("HorrorModeEvent")
 local coreHitEvent = ReplicatedStorage:WaitForChild("CoreHitEvent") -- Uusi signaali osumille
 
 local isRTSMode = true
@@ -87,7 +89,9 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	end
 end)
 
-horrorEvent.Event:Connect(function()
+-- Orbs stop as soon as the RTS phase ends
+GameState.Changed:Connect(function(newPhase)
+	if newPhase == Phases.RTS then return end
 	isRTSMode = false
 	orbsFolder:ClearAllChildren()
 	entities = {}

@@ -22,19 +22,19 @@ A Roblox game that starts as a top-down RTS maze puzzle and flips into first-per
 
 ## What exists today
 
-All gameplay code is client-side. There are no server scripts.
+All gameplay code is client-side. There are no server scripts. The phase lives in the `GameState` ModuleScript (`src/ReplicatedStorage/GameState.luau`): `RTS` -> `FakeVictory` -> `Horror` -> `TrueVictory`. Scripts use `GameState.Is(phase)`, `GameState.OnPhase(phase, fn)` and `GameState.Changed`; only `GameManager` calls `GameState.Set`.
 
 | Script | Location | Does |
 |---|---|---|
-| `CameraManager` | `src/StarterPlayer/StarterPlayerScripts/CameraManager.client.luau` | Scriptable top-down camera with WASD, character frozen. On `HorrorModeEvent`: `LockFirstPerson`, `CameraType.Custom`, walking restored. |
-| `EntitySpawner` | `src/StarterPlayer/StarterPlayerScripts/EntitySpawner.client.luau` | Spawns orbs every 3 s into the `EnergyOrbs` folder, raycast bounce (ignores other orbs and the build preview), destroys orbs more than 250 studs from the spawn or older than 60 s, fires `CoreHitEvent` on core hit. On `HorrorModeEvent`: destroys all orbs. |
-| `GameManager` | `src/StarterPlayer/StarterPlayerScripts/GameManager.client.luau` | Counts core hits (goal 5). Then: darkness (`Ambient`/`OutdoorAmbient` 0, `Brightness` 0, `ClockTime` 0), reshapes `EnemyCore` into a flat lime-green neon pad with a green PointLight, teleports player to `EntitySpawn`, adds a SpotLight flashlight on the head, fires `HorrorModeEvent`. Keeps FPS + flashlight on respawn. `EnemyCore.Touched` enables `VictoryGui`. |
-| `ArenaGrid` | `src/StarterPlayer/StarterPlayerScripts/ArenaGrid.client.luau` | Builds the glowing light-blue floor grid (neon strips every 8 studs, `CanQuery = false`) in an `ArenaGrid` folder. On `HorrorModeEvent`: removes it. |
-| `MonsterAI` | `src/StarterPlayer/StarterPlayerScripts/MonsterAI.client.luau` | Uses the existing `workspace.Hunter` rig. On `HorrorModeEvent`: recomputes a path to the player every 0.2 s, kills on touch. |
-| `BuilderScript` | `src/StarterGui/RTSGui/BuilderScript.client.luau` | Build mode toggle button, 2-stud grid snap, `GhostPreview` part (`CanQuery = false`), R rotates 90°, keys 1/2/3 pick Wall (orange) / Tower (cyan) / Floor Obstacle (magenta). Creates the `RTSWalls` folder at runtime and uses it as the mouse `TargetFilter`. On `HorrorModeEvent`: hides the GUI and turns walls into dark grey concrete. |
+| `CameraManager` | `src/StarterPlayer/StarterPlayerScripts/CameraManager.client.luau` | Scriptable top-down camera with WASD, character frozen. On `FakeVictory`: `LockFirstPerson`, `CameraType.Custom`, still frozen. On `Horror`: walking restored. Reapplies the phase rules on respawn. |
+| `EntitySpawner` | `src/StarterPlayer/StarterPlayerScripts/EntitySpawner.client.luau` | Spawns orbs every 3 s into the `EnergyOrbs` folder, raycast bounce (ignores other orbs and the build preview), destroys orbs more than 250 studs from the spawn or older than 60 s, fires `CoreHitEvent` on core hit. When the phase leaves `RTS`: stops spawning and destroys all orbs. |
+| `GameManager` | `src/StarterPlayer/StarterPlayerScripts/GameManager.client.luau` | Counts core hits (goal 5), then sets `FakeVictory`: teleports the player to `EntitySpawn` and after 4 s sets `Horror`. On `Horror`: darkness (`Ambient`/`OutdoorAmbient` 0, `Brightness` 0, `ClockTime` 0), reshapes `EnemyCore` into a flat lime-green neon pad with a green PointLight, adds a SpotLight flashlight on the head. Keeps the flashlight and spawn pad on respawn. `EnemyCore.Touched` during `Horror` sets `TrueVictory`, which freezes the player and enables `VictoryGui`. |
+| `ArenaGrid` | `src/StarterPlayer/StarterPlayerScripts/ArenaGrid.client.luau` | Builds the glowing light-blue floor grid (neon strips every 8 studs, `CanQuery = false`) in an `ArenaGrid` folder. On `FakeVictory`: removes it. |
+| `MonsterAI` | `src/StarterPlayer/StarterPlayerScripts/MonsterAI.client.luau` | Uses the existing `workspace.Hunter` rig. On `Horror`: recomputes a path to the player every 0.2 s, kills on touch. On `TrueVictory`: stops. |
+| `BuilderScript` | `src/StarterGui/RTSGui/BuilderScript.client.luau` | Build mode toggle button, 2-stud grid snap, `GhostPreview` part (`CanQuery = false`), R rotates 90°, keys 1/2/3 pick Wall (orange) / Tower (cyan) / Floor Obstacle (magenta). Creates the `RTSWalls` folder at runtime and uses it as the mouse `TargetFilter`. On `FakeVictory`: hides the GUI and turns walls into dark grey concrete. |
 
 Other instances:
-- `ReplicatedStorage`: BindableEvents `HorrorModeEvent` and `CoreHitEvent`.
+- `ReplicatedStorage`: `GameState` ModuleScript and the `CoreHitEvent` BindableEvent.
 - `Workspace`: `Baseplate` (dark blue), `EntitySpawn` (flat blue neon pad with an "S" SurfaceGui), `EnemyCore` (16-stud red neon sphere with a red PointLight), `Hunter` (rig), `SpawnLocation` (invisible, out of view at z = 120 so the frozen character is off camera during RTS).
 - `StarterGui`: `RTSGui` (`ResetOnSpawn = false`), `VictoryGui` ("TRUE VICTORY" text, disabled until escape).
 - `Lighting`: one `Sky`, one `Atmosphere`, and the post effects (Bloom, Blur, ColorCorrection, SunRays, DepthOfField).

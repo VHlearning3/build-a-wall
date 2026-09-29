@@ -3,8 +3,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local Phases = GameState.Phases
+
 local player = Players.LocalPlayer
-local horrorEvent = ReplicatedStorage:WaitForChild("HorrorModeEvent")
 
 -- Haetaan hirviö Workspacesta
 local hunter = workspace:WaitForChild("Hunter")
@@ -14,10 +16,16 @@ local rootPart = hunter:WaitForChild("HumanoidRootPart")
 local isHunting = false
 
 -- Kun ydin tuhotaan, hirviö päästetään irti
-horrorEvent.Event:Connect(function()
+GameState.OnPhase(Phases.Horror, function()
 	isHunting = true
 	-- Voit lisätä hirviölle pelottavan äänen tähän!
-	print("Hunter on vapaana...")
+	print("The Hunter is loose...")
+end)
+
+-- The Hunter stops chasing once the player has escaped
+GameState.OnPhase(Phases.TrueVictory, function()
+	isHunting = false
+	humanoid:MoveTo(rootPart.Position)
 end)
 
 -- Reitinhaun pääsilmukka
@@ -68,7 +76,7 @@ rootPart.Touched:Connect(function(hit)
 		local playerHumanoid = hit.Parent:FindFirstChild("Humanoid")
 		if playerHumanoid and playerHumanoid.Health > 0 then
 			playerHumanoid.Health = 0 -- Pelaaja kuolee
-			print("Hunter sai sinut kiinni!")
+			print("The Hunter caught you!")
 		end
 	end
 end)

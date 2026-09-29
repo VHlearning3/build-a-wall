@@ -118,7 +118,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
-game.ReplicatedStorage:WaitForChild("HorrorModeEvent").Event:Connect(function()
+local GameState = require(game.ReplicatedStorage:WaitForChild("GameState"))
+
+-- The RTS phase is over: hide the build UI and turn the neon walls into concrete
+GameState.OnPhase(GameState.Phases.FakeVictory, function()
 	gui.Enabled = false
 	isBuildingMode = false
 

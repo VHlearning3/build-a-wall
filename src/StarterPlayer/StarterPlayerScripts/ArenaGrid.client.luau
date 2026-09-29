@@ -1,7 +1,8 @@
--- Draws the glowing light-blue grid on the RTS floor and removes it when the horror phase starts
+-- Draws the glowing light-blue grid on the RTS floor and removes it when the RTS phase ends
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local horrorEvent = ReplicatedStorage:WaitForChild("HorrorModeEvent")
+local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local Phases = GameState.Phases
 
 local CELL = 8 -- Studs between grid lines
 local HALF_EXTENT = 160 -- Grid covers -160..160 on X and Z
@@ -34,6 +35,6 @@ for offset = -HALF_EXTENT, HALF_EXTENT, CELL do
 end
 gridFolder.Parent = workspace
 
-horrorEvent.Event:Connect(function()
+GameState.OnPhase(Phases.FakeVictory, function()
 	gridFolder:Destroy()
 end)
