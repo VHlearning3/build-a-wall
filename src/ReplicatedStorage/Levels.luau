@@ -30,7 +30,7 @@ return {
 	},
 	{
 		NAME = "Bumper Hall",
-		DESCRIPTION = "Spinning bumpers knock the orbs around. Only 20 pieces!",
+		DESCRIPTION = "Spinning bumpers knock the orbs around.",
 		HALF_X = 64,
 		HALF_Z = 96,
 		SPAWN_POSITION = Vector3.new(-40, 0, 72),
