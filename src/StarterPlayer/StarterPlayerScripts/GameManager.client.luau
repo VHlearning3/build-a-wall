@@ -15,6 +15,12 @@ local FAKE_VICTORY_SECONDS = 5
 
 local currentOrbs = 0
 
+-- The server follows along (walls, Hunter)
+local phaseReport = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("PhaseReport")
+GameState.Changed:Connect(function(newPhase)
+	phaseReport:FireServer(newPhase)
+end)
+
 -- The build menu HUD reads these
 core:SetAttribute("HitsRequired", ORBS_REQUIRED)
 core:SetAttribute("Hits", 0)

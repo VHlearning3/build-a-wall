@@ -5,27 +5,24 @@ local player = game.Players.LocalPlayer
 local mouse = player:GetMouse()
 
 local GameState = require(game.ReplicatedStorage:WaitForChild("GameState"))
+local BuildPieces = require(game.ReplicatedStorage:WaitForChild("BuildPieces"))
+local placePieceRemote = game.ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("PlacePiece")
 
 local gui = script.Parent
 
 local isBuildingMode = false
 local currentRotation = 0
-local gridSize = 2 -- Palikat lukittuvat ruudukkoon 2 studin tarkkuudella
+local gridSize = BuildPieces.GRID_SIZE -- Palikat lukittuvat ruudukkoon 2 studin tarkkuudella
 
--- LUODAAN KANSIO SEINILLE (Hiiri ohittaa tämän kansion, joten voit rakentaa seinien viereen helposti)
-local wallsFolder = workspace:FindFirstChild("RTSWalls")
-if not wallsFolder then
-	wallsFolder = Instance.new("Folder")
-	wallsFolder.Name = "RTSWalls"
-	wallsFolder.Parent = workspace
-end
+-- The server owns the walls folder and the walls in it (so the Hunter sees the maze)
+local wallsFolder = workspace:WaitForChild("RTSWalls")
 mouse.TargetFilter = wallsFolder -- Taikasana: hiiri osuu nyt aina maahan seinien läpi!
 
-local buildOptions = {
-	{name = "Wall", size = Vector3.new(12, 10, 2), color = BrickColor.new("Neon orange"), key = Enum.KeyCode.One},
-	{name = "Tower", size = Vector3.new(4, 10, 4), color = BrickColor.new("Cyan"), key = Enum.KeyCode.Two},
-	{name = "Floor Obstacle", size = Vector3.new(10, 2, 10), color = BrickColor.new("Magenta"), key = Enum.KeyCode.Three}
-}
+-- Same keep-clear rule as the server, so the preview can turn red
+local keepClear = {workspace:WaitForChild("EntitySpawn").Position, workspace:WaitForChild("EnemyCore").Position}
+local BLOCKED_COLOR = BrickColor.new("Really red")
+
+local buildOptions = BuildPieces.Pieces
 local selectedOptionIndex = 1
 local previewPart = nil
 
@@ -278,6 +275,19 @@ local function SnapToGrid(pos)
 	)
 end
 
+local function IsBlocked(position, size)
+	if math.abs(position.X) > BuildPieces.ARENA_HALF_EXTENT or math.abs(position.Z) > BuildPieces.ARENA_HALF_EXTENT then
+		return true
+	end
+	local reach = BuildPieces.KEEP_CLEAR_RADIUS + math.max(size.X, size.Z) / 2
+	for _, spot in keepClear do
+		if Vector3.new(position.X - spot.X, 0, position.Z - spot.Z).Magnitude < reach then
+			return true
+		end
+	end
+	return false
+end
+
 local function UpdatePreview()
 	if not isBuildingMode then
 		if previewPart then
@@ -313,6 +323,10 @@ local function UpdatePreview()
 
 		previewPart.CFrame = CFrame.new(snappedPos) * CFrame.Angles(0, math.rad(currentRotation), 0)
 		previewPart.Parent = wallsFolder
+
+		if IsBlocked(snappedPos, currentOption.size) then
+			previewPart.BrickColor = BLOCKED_COLOR
+		end
 	else
 		previewPart.Parent = nil
 	end
@@ -320,16 +334,11 @@ end
 
 RunService.RenderStepped:Connect(UpdatePreview)
 
+-- The server checks the same rules and creates the real piece
 local function PlacePiece()
 	if isBuildingMode and previewPart and previewPart.Parent == wallsFolder then
-		local newWall = Instance.new("Part")
-		newWall.Name = "Wall"
-		newWall.Size = previewPart.Size
-		newWall.Anchored = true
-		newWall.BrickColor = previewPart.BrickColor
-		newWall.Material = Enum.Material.Neon
-		newWall.CFrame = previewPart.CFrame
-		newWall.Parent = wallsFolder -- Varsinainen seinä menee kansioon
+		if IsBlocked(previewPart.Position, previewPart.Size) then return end
+		placePieceRemote:FireServer(selectedOptionIndex, previewPart.Position, currentRotation)
 	end
 end
 
@@ -353,7 +362,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	end
 end)
 
--- The RTS phase is over: hide the build UI and turn the neon walls into concrete
+-- The RTS phase is over: hide the build UI (the server turns the walls into concrete)
 GameState.OnPhase(GameState.Phases.FakeVictory, function()
 	gui.Enabled = false
 	isBuildingMode = false
@@ -361,13 +370,5 @@ GameState.OnPhase(GameState.Phases.FakeVictory, function()
 	if previewPart then
 		previewPart:Destroy()
 		previewPart = nil
-	end
-
-	-- Muutetaan nyt kansion sisällä olevat seinät
-	for _, part in pairs(wallsFolder:GetChildren()) do
-		if part:IsA("Part") and part.Material == Enum.Material.Neon then
-			part.Material = Enum.Material.Concrete
-			part.BrickColor = BrickColor.new("Dark stone grey")
-		end
 	end
 end)

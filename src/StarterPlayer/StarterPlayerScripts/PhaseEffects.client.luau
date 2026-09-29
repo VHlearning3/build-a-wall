@@ -114,4 +114,19 @@ end)
 
 GameState.OnPhase(Phases.Horror, function()
 	StopAlarms()
+
+	-- Thick dark fog: you only see what the flashlight hits
+	Lighting.OutdoorAmbient = Color3.fromRGB(4, 4, 6)
+	Lighting.FogColor = Color3.fromRGB(6, 6, 8)
+	Lighting.FogStart = 0
+	Lighting.FogEnd = 45
+	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere") -- Overrides the Fog settings when present
+	if atmosphere then
+		atmosphere.Density = 0.75
+		atmosphere.Offset = 0
+		atmosphere.Color = Color3.fromRGB(18, 18, 22)
+		atmosphere.Decay = Color3.fromRGB(8, 8, 10)
+		atmosphere.Glare = 0
+		atmosphere.Haze = 3
+	end
 end)
