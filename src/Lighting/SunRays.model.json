@@ -1,7 +1,7 @@
 {
   "className": "SunRaysEffect",
   "properties": {
-    "Spread": 0.10000000149011612,
-    "Intensity": 0.009999999776482582
+    "SourceAssetId": 7108851308.0,
+    "Intensity": 0.20399999618530273
   }
 }

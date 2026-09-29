@@ -8,8 +8,19 @@ local coreHitEvent = ReplicatedStorage:WaitForChild("CoreHitEvent") -- Uusi sign
 
 local isRTSMode = true
 local entities = {}
-local moveSpeed = 20 
+local moveSpeed = 20
 local entitySize = 5 -- Kasvatettu koko (oli 3)
+local maxDistance = 250 -- Orbs farther than this from the spawn are destroyed
+local maxLifetime = 60 -- Seconds before a stuck orb is destroyed
+
+-- Orbs live in their own folder so they do not bounce off each other
+local orbsFolder = Instance.new("Folder")
+orbsFolder.Name = "EnergyOrbs"
+orbsFolder.Parent = workspace
+
+local raycastParams = RaycastParams.new()
+raycastParams.FilterDescendantsInstances = {orbsFolder, spawnPoint}
+raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function SpawnEntity()
 	local orb = Instance.new("Part")
@@ -20,14 +31,14 @@ local function SpawnEntity()
 	orb.Material = Enum.Material.Neon
 	orb.Position = spawnPoint.Position + Vector3.new(0, entitySize/2, 0)
 
-	orb.Anchored = true 
+	orb.Anchored = true
 	orb.CanCollide = false
-	orb.Parent = workspace
+	orb.Parent = orbsFolder
 
 	local randomAngle = math.rad(math.random(-45, 45))
 	local direction = Vector3.new(math.sin(randomAngle), 0, math.cos(randomAngle)).Unit
 
-	table.insert(entities, {model = orb, dir = direction})
+	table.insert(entities, {model = orb, dir = direction, born = os.clock()})
 end
 
 task.spawn(function()
@@ -43,12 +54,15 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	for i, entityData in pairs(entities) do
 		local orb = entityData.model
 		if orb and orb.Parent then
+			-- Destroy escaped or stuck orbs
+			local distance = (orb.Position - spawnPoint.Position).Magnitude
+			if distance > maxDistance or os.clock() - entityData.born > maxLifetime then
+				orb:Destroy()
+				entities[i] = nil
+				continue
+			end
+
 			local dir = entityData.dir
-
-			local raycastParams = RaycastParams.new()
-			raycastParams.FilterDescendantsInstances = {orb, spawnPoint}
-			raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-
 			local stepDistance = moveSpeed * deltaTime
 			local result = workspace:Raycast(orb.Position, dir * (stepDistance + (entitySize/2)), raycastParams)
 
@@ -67,16 +81,14 @@ RunService.RenderStepped:Connect(function(deltaTime)
 				-- Liikutaan eteenpäin
 				orb.Position = orb.Position + (dir * stepDistance)
 			end
+		else
+			entities[i] = nil
 		end
 	end
 end)
 
 horrorEvent.Event:Connect(function()
 	isRTSMode = false
-	for _, entityData in pairs(entities) do
-		if entityData.model then
-			entityData.model:Destroy()
-		end
-	end
+	orbsFolder:ClearAllChildren()
 	entities = {}
 end)

@@ -4,7 +4,7 @@ A Roblox game that starts as a top-down RTS maze puzzle and flips into first-per
 
 ## Working rules
 
-- **Ask Vili before every code change, commit, push, or device command.** Propose the step, wait for a yes.
+- Vili said to stop asking before each plan step: build the step, playtest it, then commit it to `main` and push.
 - Vili writes in Finnish; reply in Finnish. All in-game text, UI and console output must be in English.
 - Write new code comments in English (older comments are still Finnish).
 
@@ -12,7 +12,7 @@ A Roblox game that starts as a top-down RTS maze puzzle and flips into first-per
 
 - Rojo 7.7 project managed with Rokit (`rokit.toml`). Mapping lives in `default.project.json`.
 - Sync to Studio: `rojo serve`, then Connect in the Rojo plugin. Build a place file with `rojo build -o build-a-wall.rbxlx`.
-- Scripts are plain `.luau` files. GUIs and Workspace parts are binary `.rbxm` files, so edit those in Studio.
+- Scripts are plain `.luau` files. `RTSGui` is a text folder (`src/StarterGui/RTSGui/`). `VictoryGui` and the Workspace parts are still binary `.rbxm` files, so edit those in Studio.
 
 ## Core loop
 
@@ -27,16 +27,16 @@ All gameplay code is client-side. There are no server scripts.
 | Script | Location | Does |
 |---|---|---|
 | `CameraManager` | `src/StarterPlayer/StarterPlayerScripts/CameraManager.client.luau` | Scriptable top-down camera with WASD, character frozen. On `HorrorModeEvent`: `LockFirstPerson`, `CameraType.Custom`, walking restored. |
-| `EntitySpawner` | `src/StarterPlayer/StarterPlayerScripts/EntitySpawner.client.luau` | Spawns orbs every 3 s, raycast bounce, fires `CoreHitEvent` on core hit. On `HorrorModeEvent`: destroys all orbs. |
+| `EntitySpawner` | `src/StarterPlayer/StarterPlayerScripts/EntitySpawner.client.luau` | Spawns orbs every 3 s into the `EnergyOrbs` folder, raycast bounce (ignores other orbs and the build preview), destroys orbs more than 250 studs from the spawn or older than 60 s, fires `CoreHitEvent` on core hit. On `HorrorModeEvent`: destroys all orbs. |
 | `GameManager` | `src/StarterPlayer/StarterPlayerScripts/GameManager.client.luau` | Counts core hits (goal 5). Then: darkness (`Ambient`/`OutdoorAmbient` 0, `Brightness` 0, `ClockTime` 0), reshapes `EnemyCore` into a flat lime-green neon pad with a green PointLight, teleports player to `EntitySpawn`, adds a SpotLight flashlight on the head, fires `HorrorModeEvent`. Keeps FPS + flashlight on respawn. `EnemyCore.Touched` enables `VictoryGui`. |
 | `MonsterAI` | `src/StarterPlayer/StarterPlayerScripts/MonsterAI.client.luau` | Uses the existing `workspace.Hunter` rig. On `HorrorModeEvent`: recomputes a path to the player every 0.2 s, kills on touch. |
-| `BuilderScript` | LocalScript **inside** `src/StarterGui/RTSGui.rbxm` | Build mode toggle button, 2-stud grid snap, preview part, R rotates 90°, keys 1/2/3 pick Wall (orange) / Tower (cyan) / Floor Obstacle (magenta). Creates the `RTSWalls` folder at runtime and uses it as the mouse `TargetFilter`. On `HorrorModeEvent`: hides the GUI and turns walls into dark grey concrete. |
+| `BuilderScript` | `src/StarterGui/RTSGui/BuilderScript.client.luau` | Build mode toggle button, 2-stud grid snap, `GhostPreview` part (`CanQuery = false`), R rotates 90°, keys 1/2/3 pick Wall (orange) / Tower (cyan) / Floor Obstacle (magenta). Creates the `RTSWalls` folder at runtime and uses it as the mouse `TargetFilter`. On `HorrorModeEvent`: hides the GUI and turns walls into dark grey concrete. |
 
 Other instances:
 - `ReplicatedStorage`: BindableEvents `HorrorModeEvent` and `CoreHitEvent`.
-- `Workspace`: `Baseplate`, `EntitySpawn`, `EnemyCore` (red sphere), `Hunter` (rig), plus post effects.
-- `StarterGui`: `RTSGui`, `VictoryGui` ("TRUE VICTORY" text, disabled until escape).
-- `Lighting`: currently has several `Sky` and `Atmosphere` objects (known clutter, keep only one each).
+- `Workspace`: `Baseplate`, `EntitySpawn`, `EnemyCore` (red sphere), `Hunter` (rig).
+- `StarterGui`: `RTSGui` (`ResetOnSpawn = false`), `VictoryGui` ("TRUE VICTORY" text, disabled until escape).
+- `Lighting`: one `Sky`, one `Atmosphere`, and the post effects (Bloom, Blur, ColorCorrection, SunRays, DepthOfField).
 
 ## Target design (not built yet)
 
@@ -45,8 +45,7 @@ Other instances:
 - **Horror atmosphere:** thick fog, a narrow and dim flashlight, black Hunter with glowing red eyes. Fog clears near the escape zone.
 - **True victory:** lights and fog lift, "TRUE VICTORY: YOU SURVIVED".
 - **Hunter rules:** hidden and idle during the RTS phase, stops chasing after victory.
-- **GUIs:** `ResetOnSpawn = false` on every ScreenGui so respawns don't reset them.
-- **Orbs:** ignore the build preview part in raycasts, and destroy orbs that leave the play area.
+- **GUIs:** `ResetOnSpawn = false` on `VictoryGui` too (done for `RTSGui`).
 - Optional later: move authority to server scripts.
 
 ## Testing

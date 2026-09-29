@@ -43,10 +43,13 @@ coreHitEvent.Event:Connect(function()
 
 	currentOrbs += 1
 
-	-- Flash effect
+	-- Flash effect (does not pause this handler)
 	core.BrickColor = BrickColor.new("White")
-	task.wait(0.1)
-	core.BrickColor = BrickColor.new("Really red")
+	task.delay(0.1, function()
+		if not isHorrorMode then
+			core.BrickColor = BrickColor.new("Really red")
+		end
+	end)
 
 	if currentOrbs >= orbsRequired then
 		isHorrorMode = true
