@@ -2,10 +2,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local Phases = GameState.Phases
 
 local CELL = 8 -- Studs between grid lines
-local HALF_EXTENT = 160 -- Grid covers -160..160 on X and Z
 local LINE_WIDTH = 0.15
 local LINE_COLOR = Color3.fromRGB(120, 200, 255)
 
@@ -28,10 +28,13 @@ local function MakeLine(size, position)
 	line.Parent = gridFolder
 end
 
-local length = HALF_EXTENT * 2
-for offset = -HALF_EXTENT, HALF_EXTENT, CELL do
-	MakeLine(Vector3.new(LINE_WIDTH, 0.05, length), Vector3.new(offset, 0.03, 0))
-	MakeLine(Vector3.new(length, 0.05, LINE_WIDTH), Vector3.new(0, 0.03, offset))
+-- Covers the arena floor inside the border walls
+local halfX, halfZ = ArenaLayout.HALF_X, ArenaLayout.HALF_Z
+for x = -halfX, halfX, CELL do
+	MakeLine(Vector3.new(LINE_WIDTH, 0.05, halfZ * 2), Vector3.new(x, 0.03, 0))
+end
+for z = -halfZ, halfZ, CELL do
+	MakeLine(Vector3.new(halfX * 2, 0.05, LINE_WIDTH), Vector3.new(0, 0.03, z))
 end
 gridFolder.Parent = workspace
 

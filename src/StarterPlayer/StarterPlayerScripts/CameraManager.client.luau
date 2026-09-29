@@ -9,12 +9,74 @@ local Phases = GameState.Phases
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
+
 -- Asetukset
-local cameraSpeed = 40 -- Kuinka nopeasti RTS-kamera liikkuu
-local rtsCameraPosition = Vector3.new(0, 40, 40) -- Kameran aloituspaikka
+local cameraSpeed = 60 -- Kuinka nopeasti RTS-kamera liikkuu
+local MIN_HEIGHT, MAX_HEIGHT = 30, 140
+local ZOOM_STEP = 10 -- Studs per mouse wheel notch
+local rtsCameraPosition = Vector3.new(0, 110, 5) -- Starts high enough to see both the spawn and the core
+
+local function ClampCamera()
+	rtsCameraPosition = Vector3.new(
+		math.clamp(rtsCameraPosition.X, -ArenaLayout.HALF_X, ArenaLayout.HALF_X),
+		math.clamp(rtsCameraPosition.Y, MIN_HEIGHT, MAX_HEIGHT),
+		math.clamp(rtsCameraPosition.Z, -ArenaLayout.HALF_Z, ArenaLayout.HALF_Z)
+	)
+end
+
+-- World studs per screen pixel at the current height, for dragging with a finger
+local function StudsPerPixel()
+	local halfHeight = rtsCameraPosition.Y * math.tan(math.rad(camera.FieldOfView / 2))
+	return halfHeight * 2 / camera.ViewportSize.Y
+end
+
+UserInputService.InputChanged:Connect(function(input, gameProcessed)
+	if not GameState.Is(Phases.RTS) then return end
+	if input.UserInputType == Enum.UserInputType.MouseWheel and not gameProcessed then
+		rtsCameraPosition -= Vector3.new(0, input.Position.Z * ZOOM_STEP, 0)
+	elseif input.UserInputType == Enum.UserInputType.Touch and not gameProcessed then
+		-- Drag to move: the ground follows the finger
+		rtsCameraPosition -= Vector3.new(input.Delta.X, 0, input.Delta.Y) * StudsPerPixel()
+	end
+	ClampCamera()
+end)
+
+local lastPinchScale = 1
+UserInputService.TouchPinch:Connect(function(_, scale, _, state, gameProcessed)
+	if gameProcessed or not GameState.Is(Phases.RTS) then return end
+	if state == Enum.UserInputState.Begin then
+		lastPinchScale = 1
+	end
+	rtsCameraPosition = Vector3.new(rtsCameraPosition.X, rtsCameraPosition.Y * lastPinchScale / scale, rtsCameraPosition.Z)
+	lastPinchScale = scale
+	ClampCamera()
+end)
+
+-- The default movement controls (keyboard and the mobile thumbstick) are only on in the horror
+local controls = nil
+task.spawn(function()
+	local ok, playerModule = pcall(function()
+		return require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule"))
+	end)
+	if ok then
+		controls = playerModule:GetControls()
+		if not GameState.Is(Phases.Horror) then
+			controls:Disable()
+		end
+	end
+end)
 
 -- Movement per phase: frozen during RTS and the fake victory, free in the horror
 local function ApplyMovement(character)
+	if controls then
+		if GameState.Is(Phases.Horror) then
+			controls:Enable()
+		else
+			controls:Disable()
+		end
+	end
+
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	if not humanoid then return end
 
@@ -62,8 +124,9 @@ local function UpdateRTSCamera(deltaTime)
 		moveVector = moveVector.Unit
 	end
 
-	-- Päivitetään kameran sijaintia
-	rtsCameraPosition += moveVector * cameraSpeed * deltaTime
+	-- Päivitetään kameran sijaintia (faster when zoomed out)
+	rtsCameraPosition += moveVector * cameraSpeed * (rtsCameraPosition.Y / 80) * deltaTime
+	ClampCamera()
 
 	-- Asetetaan kameran sijainti ja käännetään sitä X-akselilla tarkalleen 90 astetta alaspäin
 	camera.CFrame = CFrame.new(rtsCameraPosition) * CFrame.Angles(math.rad(-90), 0, 0)

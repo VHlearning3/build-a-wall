@@ -13,7 +13,7 @@ local entities = {}
 local moveSpeed = 20
 local entitySize = 5 -- Kasvatettu koko (oli 3)
 local maxDistance = 250 -- Orbs farther than this from the spawn are destroyed
-local maxLifetime = 60 -- Seconds before a stuck orb is destroyed
+local maxLifetime = 90 -- Seconds before a stuck orb is destroyed
 
 local orbsFolder = Instance.new("Folder")
 orbsFolder.Name = "EnergyOrbs"
@@ -24,6 +24,7 @@ orbsFolder.Parent = workspace
 local raycastParams = RaycastParams.new()
 raycastParams.FilterDescendantsInstances = {
 	workspace:WaitForChild("RTSWalls"),
+	workspace:WaitForChild("Arena"),
 	workspace:WaitForChild("EnemyCore"),
 }
 raycastParams.FilterType = Enum.RaycastFilterType.Include
