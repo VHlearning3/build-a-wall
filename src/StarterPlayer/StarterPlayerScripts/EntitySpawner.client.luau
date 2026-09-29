@@ -109,8 +109,8 @@ RunService.RenderStepped:Connect(function(deltaTime)
 
 			if result then
 				-- TARKISTETAAN, ONKO OSUMA YTIMEEN
-				if result.Instance.Name == "EnemyCore" then
-					coreHitEvent:Fire() -- Lähetetään viesti GameManagerille
+				if result.Instance.Name:match("^EnemyCore") then
+					coreHitEvent:Fire(result.Instance) -- Lähetetään viesti GameManagerille
 					orb:Destroy() -- Tuhotaan pallo
 					entities[i] = nil -- Poistetaan listalta
 				else

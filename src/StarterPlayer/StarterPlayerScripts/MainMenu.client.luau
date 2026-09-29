@@ -6,6 +6,8 @@ local TweenService = game:GetService("TweenService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
+local selectLevel = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("SelectLevel")
 local Phases = GameState.Phases
 
 local player = Players.LocalPlayer
@@ -102,7 +104,7 @@ local menu = Instance.new("Frame")
 menu.Name = "Menu"
 menu.AnchorPoint = Vector2.new(0.5, 0.5)
 menu.Position = UDim2.fromScale(0.5, 0.5)
-menu.Size = UDim2.fromOffset(560, 470)
+menu.Size = UDim2.fromOffset(560, 560)
 menu.BackgroundColor3 = PANEL
 menu.BackgroundTransparency = 0.1
 menu.Parent = gui
@@ -115,17 +117,71 @@ gradient.Rotation = 90
 gradient.Color = ColorSequence.new(Color3.fromRGB(40, 90, 170), Color3.fromRGB(255, 255, 255))
 gradient.Parent = menu
 
-local title = Label(menu, "BUILD A WALL", CUTE_FONT, ORANGE, UDim2.fromScale(0.86, 0.2), UDim2.fromScale(0.5, 0.16))
+local title = Label(menu, "BUILD A WALL", CUTE_FONT, ORANGE, UDim2.fromScale(0.86, 0.17), UDim2.fromScale(0.5, 0.13))
 local titleStroke = Instance.new("UIStroke")
 titleStroke.Color = Color3.fromRGB(90, 30, 0)
 titleStroke.Thickness = 3
 titleStroke.Parent = title
-Label(menu, "Bounce the orbs. Break the core!", CUTE_FONT, CYAN, UDim2.fromScale(0.8, 0.07), UDim2.fromScale(0.5, 0.31))
+Label(menu, "Bounce the orbs. Break the core!", CUTE_FONT, CYAN, UDim2.fromScale(0.8, 0.06), UDim2.fromScale(0.5, 0.25))
 
-local playButton = BigButton(menu, "PLAY", ORANGE, UDim2.fromScale(0.5, 0.5), UDim2.fromScale(0.55, 0.17))
-local howButton = BigButton(menu, "HOW TO PLAY", Color3.fromRGB(40, 150, 220), UDim2.fromScale(0.5, 0.7), UDim2.fromScale(0.55, 0.12))
+-- Level picker: < LEVEL 2  Bumper Hall >
+local levelName = Label(menu, "", CUTE_FONT, Color3.new(1, 1, 1), UDim2.fromScale(0.6, 0.07), UDim2.fromScale(0.5, 0.37))
+local levelInfo = Label(menu, "", BODY_FONT, Color3.fromRGB(180, 205, 230), UDim2.fromScale(0.62, 0.04), UDim2.fromScale(0.5, 0.44))
+local previousButton = BigButton(menu, "<", Color3.fromRGB(40, 60, 110), UDim2.fromScale(0.12, 0.4), UDim2.fromScale(0.1, 0.1))
+previousButton.Name = "PreviousLevel"
+local nextButton = BigButton(menu, ">", Color3.fromRGB(40, 60, 110), UDim2.fromScale(0.88, 0.4), UDim2.fromScale(0.1, 0.1))
+nextButton.Name = "NextLevel"
 
-Label(menu, "This game contains flashing lights.", BODY_FONT, Color3.fromRGB(190, 200, 215), UDim2.fromScale(0.8, 0.04), UDim2.fromScale(0.5, 0.9))
+local playButton = BigButton(menu, "PLAY", ORANGE, UDim2.fromScale(0.5, 0.6), UDim2.fromScale(0.55, 0.14))
+playButton.Name = "PlayButton"
+local howButton = BigButton(menu, "HOW TO PLAY", Color3.fromRGB(40, 150, 220), UDim2.fromScale(0.5, 0.77), UDim2.fromScale(0.55, 0.1))
+howButton.Name = "HowToPlayButton"
+
+Label(menu, "This game contains flashing lights.", BODY_FONT, Color3.fromRGB(190, 200, 215), UDim2.fromScale(0.8, 0.035), UDim2.fromScale(0.5, 0.92))
+
+local shownLevel = ArenaLayout.LevelIndex() -- The one on screen; may be locked
+
+local function Unlocked()
+	return player:GetAttribute("UnlockedLevel") or 1
+end
+
+local function RefreshLevel()
+	local level = ArenaLayout.GetLevel(shownLevel)
+	local locked = shownLevel > Unlocked()
+	levelName.Text = "LEVEL " .. shownLevel .. "  " .. level.NAME
+	levelInfo.Text = if locked then "Locked: escape level " .. (shownLevel - 1) .. " first." else level.DESCRIPTION
+	levelName.TextColor3 = if locked then Color3.fromRGB(130, 140, 160) else Color3.new(1, 1, 1)
+	playButton.Text = if locked then "LOCKED" else "PLAY"
+	playButton.BackgroundColor3 = if locked then Color3.fromRGB(90, 90, 100) else ORANGE
+	previousButton.Visible = shownLevel > 1
+	nextButton.Visible = shownLevel < ArenaLayout.LEVEL_COUNT
+end
+
+local function ShowLevel(index)
+	shownLevel = math.clamp(index, 1, ArenaLayout.LEVEL_COUNT)
+	RefreshLevel()
+	if shownLevel <= Unlocked() and shownLevel ~= ArenaLayout.LevelIndex() then
+		selectLevel:FireServer(shownLevel) -- The arena behind the menu switches to it
+	end
+end
+
+previousButton.MouseButton1Click:Connect(function()
+	SoundFx.Play("UiClick", {volume = 0.4})
+	ShowLevel(shownLevel - 1)
+end)
+nextButton.MouseButton1Click:Connect(function()
+	SoundFx.Play("UiClick", {volume = 0.4})
+	ShowLevel(shownLevel + 1)
+end)
+player:GetAttributeChangedSignal("UnlockedLevel"):Connect(RefreshLevel)
+workspace:GetAttributeChangedSignal("Level"):Connect(function()
+	-- The level can also change from the end screen (NEXT LEVEL)
+	if ArenaLayout.LevelIndex() <= Unlocked() then
+		shownLevel = ArenaLayout.LevelIndex()
+	end
+	RefreshLevel()
+end)
+RefreshLevel()
 
 -- Gentle bob of the title
 task.spawn(function()
@@ -200,7 +256,8 @@ end)
 
 playButton.MouseButton1Click:Connect(function()
 	SoundFx.Play("UiClick", {volume = 0.4})
-	if GameState.Is(Phases.Menu) then
+	-- Only once the arena behind the menu is the level on screen
+	if GameState.Is(Phases.Menu) and shownLevel <= Unlocked() and shownLevel == ArenaLayout.LevelIndex() then
 		GameState.Set(Phases.RTS)
 	end
 end)
@@ -233,6 +290,23 @@ local worldLabels = {
 	WorldLabel(workspace:WaitForChild("EnemyCore"), "ENEMY CORE", Color3.fromRGB(255, 90, 90), 12),
 	WorldLabel(workspace:WaitForChild("EntitySpawn"), "ORBS START HERE", CYAN, 6),
 }
+
+-- Levels with more cores put the extra ones in the arena folder
+local arena = workspace:WaitForChild("Arena")
+arena.ChildAdded:Connect(function(child)
+	if child:IsA("BasePart") and child.Name:match("^EnemyCore%d") then
+		local label = WorldLabel(child, "ENEMY CORE", Color3.fromRGB(255, 90, 90), 12)
+		label.Enabled = GameState.Is(Phases.RTS)
+		table.insert(worldLabels, label)
+		child.Destroying:Once(function()
+			local index = table.find(worldLabels, label)
+			if index then
+				table.remove(worldLabels, index)
+			end
+			label:Destroy()
+		end)
+	end
+end)
 
 -------------------------------------------------------------------------
 -- PHASES

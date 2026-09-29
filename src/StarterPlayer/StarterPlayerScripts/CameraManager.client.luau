@@ -15,8 +15,11 @@ local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local cameraSpeed = 60 -- Kuinka nopeasti RTS-kamera liikkuu
 local MIN_HEIGHT, MAX_HEIGHT = 30, 140
 local ZOOM_STEP = 10 -- Studs per mouse wheel notch
-local RTS_START = Vector3.new(0, 110, 5) -- High enough to see both the spawn and the core
-local rtsCameraPosition = RTS_START
+-- Starts over the middle of the level, high enough to see the spawn and the cores
+local function RtsStart()
+	return Vector3.new(0, math.min(MAX_HEIGHT, ArenaLayout.HALF_Z * 1.15), 0)
+end
+local rtsCameraPosition = RtsStart()
 
 local function ClampCamera()
 	rtsCameraPosition = Vector3.new(
@@ -111,7 +114,7 @@ end
 local function UpdateMenuCamera()
 	camera.CameraType = Enum.CameraType.Scriptable
 	local t = os.clock() * 0.08
-	local eye = Vector3.new(math.sin(t) * 60, 75, math.cos(t) * 90)
+	local eye = Vector3.new(math.sin(t) * ArenaLayout.HALF_X, 75, math.cos(t) * ArenaLayout.HALF_Z * 0.9)
 	camera.CFrame = CFrame.lookAt(eye, Vector3.new(0, 0, 0))
 end
 
@@ -192,10 +195,14 @@ end
 -- A new round from the start: back to the overhead camera
 GameState.Resetting:Connect(function(target)
 	if GameState.IsFullReset(target) then
-		rtsCameraPosition = RTS_START
+		rtsCameraPosition = RtsStart()
 		player.CameraMode = Enum.CameraMode.Classic
 		if controls then
 			controls:Disable()
 		end
 	end
+end)
+
+workspace:GetAttributeChangedSignal("Level"):Connect(function()
+	rtsCameraPosition = RtsStart()
 end)

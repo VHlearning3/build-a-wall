@@ -241,18 +241,27 @@ Label(coreHud, "ENEMY CORE", TITLE_FONT, Color3.fromRGB(255, 90, 90), UDim2.new(
 
 local pips = {}
 local core = workspace:WaitForChild("EnemyCore")
-local hitsRequired = core:GetAttribute("HitsRequired") or 5
-for i = 1, hitsRequired do
-	local pip = Instance.new("Frame")
-	local width = (280 - (hitsRequired - 1) * 6) / hitsRequired
-	pip.Size = UDim2.fromOffset(width, 16)
-	pip.Position = UDim2.fromOffset(10 + (i - 1) * (width + 6), 34)
-	pip.BackgroundColor3 = Color3.fromRGB(60, 20, 25)
-	pip.BorderSizePixel = 0
-	pip.Parent = coreHud
-	Round(pip, 4)
-	pips[i] = pip
+
+-- One pip per hit needed; the number changes with the level
+local function BuildPips()
+	for _, pip in pips do
+		pip:Destroy()
+	end
+	table.clear(pips)
+	local hitsRequired = core:GetAttribute("HitsRequired") or 5
+	for i = 1, hitsRequired do
+		local pip = Instance.new("Frame")
+		local width = (280 - (hitsRequired - 1) * 6) / hitsRequired
+		pip.Size = UDim2.fromOffset(width, 16)
+		pip.Position = UDim2.fromOffset(10 + (i - 1) * (width + 6), 34)
+		pip.BackgroundColor3 = Color3.fromRGB(60, 20, 25)
+		pip.BorderSizePixel = 0
+		pip.Parent = coreHud
+		Round(pip, 4)
+		pips[i] = pip
+	end
 end
+BuildPips()
 
 local function UpdateCoreHud()
 	local hits = core:GetAttribute("Hits") or 0
@@ -261,15 +270,19 @@ local function UpdateCoreHud()
 	end
 end
 core:GetAttributeChangedSignal("Hits"):Connect(UpdateCoreHud)
+core:GetAttributeChangedSignal("HitsRequired"):Connect(function()
+	BuildPips()
+	UpdateCoreHud()
+end)
 UpdateCoreHud()
 
 local function PiecesLeft()
-	return BuildPieces.BUDGET - #wallsFolder:GetChildren() + (if previewPart and previewPart.Parent == wallsFolder then 1 else 0)
+	return ArenaLayout.BUDGET - #wallsFolder:GetChildren() + (if previewPart and previewPart.Parent == wallsFolder then 1 else 0)
 end
 
 local function UpdateBudget()
 	local left = PiecesLeft()
-	budgetLabel.Text = "PIECES " .. left .. " / " .. BuildPieces.BUDGET
+	budgetLabel.Text = "PIECES " .. left .. " / " .. ArenaLayout.BUDGET
 	budgetLabel.TextColor3 = if left == 0 then Color3.fromRGB(255, 110, 110) else Color3.fromRGB(225, 240, 255)
 end
 
@@ -396,8 +409,14 @@ local function IsBlocked(position, footprint)
 		return true
 	end
 	local reach = BuildPieces.KEEP_CLEAR_RADIUS + math.max(footprint.X, footprint.Z) / 2
-	for _, spot in {ArenaLayout.SPAWN_POSITION, ArenaLayout.CORE_POSITION} do
+	for _, spot in ArenaLayout.KeepClearSpots() do
 		if Vector3.new(position.X - spot.X, 0, position.Z - spot.Z).Magnitude < reach then
+			return true
+		end
+	end
+	for _, bumper in ArenaLayout.BUMPERS do
+		local sweep = bumper.length / 2 + 1 + math.max(footprint.X, footprint.Z) / 2
+		if Vector3.new(position.X - bumper.position.X, 0, position.Z - bumper.position.Z).Magnitude < sweep then
 			return true
 		end
 	end

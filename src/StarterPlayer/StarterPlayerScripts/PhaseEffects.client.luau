@@ -6,13 +6,13 @@ local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local Phases = GameState.Phases
 
 local TweenService = game:GetService("TweenService")
 
 local baseplate = workspace:WaitForChild("Baseplate")
 local entitySpawn = workspace:WaitForChild("EntitySpawn")
-local core = workspace:WaitForChild("EnemyCore")
 local player = game:GetService("Players").LocalPlayer
 
 local HORROR_FOG_DENSITY = 0.75
@@ -20,10 +20,8 @@ local CLEAR_FOG_DENSITY = 0.3 -- Right next to the escape zone
 local FOG_CLEAR_START = 45 -- Fog starts thinning this far from the escape zone
 local FOG_CLEAR_END = 10 -- ...and is thinnest this close
 
-local ROOM_HALF_EXTENT = 160 -- Same area as the RTS grid
 local CEILING_Y = 10.5 -- Walls are 10 studs tall, so the ceiling sits right on top of them
 local ALARM_SPACING = 32
-local ALARM_HALF_EXTENT = 96
 local ALARM_COLOR = Color3.fromRGB(255, 25, 15)
 local ALARM_PULSE_SPEED = 4 -- Radians per second
 
@@ -91,15 +89,16 @@ local function BuildRoom()
 	ceiling.CanQuery = false
 	ceiling.Material = Enum.Material.Concrete
 	ceiling.Color = Color3.fromRGB(45, 45, 48)
-	ceiling.Size = Vector3.new(ROOM_HALF_EXTENT * 2, 1, ROOM_HALF_EXTENT * 2)
+	-- Covers the arena and its border walls
+	ceiling.Size = Vector3.new(ArenaLayout.HALF_X * 2 + 8, 1, ArenaLayout.HALF_Z * 2 + 8)
 	ceiling.Position = Vector3.new(0, CEILING_Y + 0.5, 0)
 	ceiling.Parent = roomFolder
 
 	-- One alarm right above the spawn pad, the rest on a grid
 	local spawnPos = entitySpawn.Position
 	MakeAlarm(Vector3.new(spawnPos.X, CEILING_Y - 0.2, spawnPos.Z), true)
-	for x = -ALARM_HALF_EXTENT, ALARM_HALF_EXTENT, ALARM_SPACING do
-		for z = -ALARM_HALF_EXTENT, ALARM_HALF_EXTENT, ALARM_SPACING do
+	for x = -ArenaLayout.HALF_X + ALARM_SPACING / 2, ArenaLayout.HALF_X, ALARM_SPACING do
+		for z = -ArenaLayout.HALF_Z + ALARM_SPACING / 2, ArenaLayout.HALF_Z, ALARM_SPACING do
 			MakeAlarm(Vector3.new(x, CEILING_Y - 0.2, z), false)
 		end
 	end
@@ -168,7 +167,7 @@ GameState.OnPhase(Phases.Horror, function()
 	end
 
 	-- The fog thins as the player gets close to the escape zone
-	local escapeCenter = Vector3.new(core.Position.X, 0, core.Position.Z)
+	local escapeCenter = Vector3.new(ArenaLayout.ESCAPE_POSITION.X, 0, ArenaLayout.ESCAPE_POSITION.Z)
 	if fogConnection then
 		fogConnection:Disconnect()
 	end

@@ -134,12 +134,15 @@ local function ShowEndScreen(config)
 		end
 		restartRequest:FireServer(kind)
 	end
-	MakeButton(buttons, config.mainKind .. "Button", config.mainButton, config.color, UDim2.new(0.5, -130, 0.66, 0), function(button)
-		Request(config.mainKind, button)
-	end)
-	MakeButton(buttons, "MainMenuButton", "MAIN MENU", Color3.fromRGB(200, 210, 220), UDim2.new(0.5, 130, 0.66, 0), function(button)
-		Request("MainMenu", button)
-	end)
+	-- Buttons side by side, centred: {kind, text, color}
+	local list = table.clone(config.buttons)
+	table.insert(list, {"MainMenu", "MAIN MENU", Color3.fromRGB(200, 210, 220)})
+	for index, entry in list do
+		local offset = (index - (#list + 1) / 2) * 260
+		MakeButton(buttons, entry[1] .. "Button", entry[2], entry[3], UDim2.new(0.5, offset, 0.66, 0), function(button)
+			Request(entry[1], button)
+		end)
+	end
 
 	-- Slow, calm fade in; the buttons come a moment later so nobody skips the screen by accident
 	for _, label in texts do
@@ -153,6 +156,17 @@ local function ShowEndScreen(config)
 			buttons.Visible = true
 		end
 	end)
+end
+
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
+
+-- After a win: the next level if there is one (it is unlocked by winning), and playing this one again
+local function NextLevelButtons()
+	local green = Color3.fromRGB(120, 255, 150)
+	if ArenaLayout.LevelIndex() < ArenaLayout.LEVEL_COUNT then
+		return {{"NextLevel", "NEXT LEVEL", green}, {"PlayAgain", "PLAY AGAIN", Color3.fromRGB(170, 230, 190)}}
+	end
+	return {{"PlayAgain", "PLAY AGAIN", green}}
 end
 
 local function DeathsText()
@@ -172,8 +186,7 @@ GameState.OnPhase(Phases.TrueVictory, function()
 		record = if player:GetAttribute("NewRecord") then "NEW RECORD!  Escapes so far: " .. wins .. ". The Hunter will be faster next time." else "Escapes so far: " .. wins .. ". The Hunter will be faster next time.",
 		color = Color3.fromRGB(120, 255, 150),
 		tint = Color3.fromRGB(5, 25, 12),
-		mainButton = "PLAY AGAIN",
-		mainKind = "PlayAgain",
+		buttons = NextLevelButtons(),
 	})
 end)
 
@@ -184,8 +197,7 @@ GameState.OnPhase(Phases.GameOver, function()
 		stats = "Best escape: " .. FormatTime(player:GetAttribute("BestEscape")) .. "    " .. DeathsText(),
 		color = Color3.fromRGB(255, 70, 70),
 		tint = Color3.fromRGB(25, 0, 0),
-		mainButton = "TRY AGAIN",
-		mainKind = "Retry",
+		buttons = {{"Retry", "TRY AGAIN", Color3.fromRGB(255, 70, 70)}},
 	})
 end)
 

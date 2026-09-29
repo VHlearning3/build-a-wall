@@ -18,11 +18,17 @@ A Roblox game that looks like a cute top-down maze builder and flips into first-
 
 ## Core loop
 
-1. **Menu.** Cheerful main menu over a slow camera sweep of the arena; orbs already bounce around behind it.
-2. **RTS (build and route).** Top-down camera over a walled 128x192 arena with a prebuilt zig-zag maze. Cyan orbs fly out of the `EntitySpawn` pad every 2.5 s and bounce off walls like billiard balls. The player places up to 30 pieces to steer them into the red `EnemyCore`.
-3. **Fake victory (the twist).** After 5 core hits: hard cut to first person in a dark concrete room with a ceiling and pulsing red alarms, a flashlight in hand, glitching "LEVEL CLEARED" and "- ERROR: BREACH DETECTED -", siren.
+1. **Menu.** Cheerful main menu with a level picker over a slow camera sweep of the chosen level; orbs already bounce around behind it.
+2. **RTS (build and route).** Top-down camera over a walled arena with a prebuilt maze. Cyan orbs fly out of the `EntitySpawn` pad every 2.5 s and bounce off walls like billiard balls. The player places pieces (budget per level) to steer them into the red core(s).
+3. **Fake victory (the twist).** After the level's core hits: hard cut to first person in a dark concrete room with a ceiling and pulsing red alarms, a flashlight in hand, glitching "LEVEL CLEARED" and "- ERROR: BREACH DETECTED -", siren.
 4. **Horror (survive and escape).** Thick fog, narrow flickering flashlight, heartbeat. The black `Hunter` with red eyes waits in its lair behind the core, creeps towards the player, then chases when it sees them. 3 lives. Reaching the green escape zone where the core was gives `TrueVictory`; losing all lives gives `GameOver`.
-5. **End screens.** True victory: PLAY AGAIN (build a new maze) or MAIN MENU. Game over: TRY AGAIN (same maze, escape again) or MAIN MENU. All restarts happen in place (no teleport), so they work in Studio too.
+5. **End screens.** True victory: NEXT LEVEL (when there is one), PLAY AGAIN (build a new maze) or MAIN MENU. Game over: TRY AGAIN (same maze, escape again) or MAIN MENU. All restarts happen in place (no teleport), so they work in Studio too.
+
+## Levels
+
+Defined in `src/ReplicatedStorage/Levels.luau`: 1 The Grid, 2 Bumper Hall (spinning bumper bars, 20 pieces), 3 Twin Cores (two cores, 3 hits each, escape at the far one), 4 The Long Corridor (64x300, Hunter chases right away). Each level has its size, spawn, cores (position and hits), escape position, budget, maze rectangles, bumpers and Hunter settings (`HUNTER_LAIR_WAIT`, `HUNTER_STALKS`).
+
+The server picks the level with the workspace attribute `Level` (`Remotes.SelectLevel` from the menu, or NEXT LEVEL). `ArenaLayout` reads every field of the current level (`ArenaLayout.HALF_X`, `.MAZE`, `.BUDGET`, ...), so code always gets the current level. `ArenaService` rebuilds the arena, moves the spawn pad and `EnemyCore`, and adds extra cores as `EnemyCore2`... inside the `Arena` folder. Winning a level unlocks the next (saved; every level is open in Studio). When adding a level, check the Output: the server warns if the prebuilt maze has no route from the spawn to the escape.
 
 ## How the code is organised
 
@@ -45,6 +51,7 @@ The client runs the game flow; the server owns the arena, the maze pieces, the H
 | `Flashlight` | First-person hand with a flashlight (`FlashlightViewmodel` in Workspace; lights under the Camera do not render). Wide beam in `FakeVictory`, narrow and dim in `Horror`, flickers now and then and a lot when the Hunter is within 35 studs. |
 | `FakeVictoryGui` | Black cut-in, glitching "LEVEL CLEARED" that gets worse, blinking red "- ERROR: BREACH DETECTED -". |
 | `EndScreens` | Lives counter in `Horror`; victory and game over screens with escape time, best time, deaths, new-record line and the two buttons. |
+| `BumperSpin` | Spins the bumper bars locally while building; snaps them back to the server position at the fake victory. |
 | `AudioDirector` | Music and ambience per phase (see `SoundFx`): building music, hard cut + glitch + siren at the twist, drone music and a heartbeat that speeds up as the Hunter gets close, growl at game over. |
 | `RTSGui/BuilderScript` (`src/StarterGui/RTSGui/`) | Neon build bar (BUILD toggle, Wall/Tower/Floor Obstacle, ROTATE, REMOVE, piece budget, hints, refusal message) and the top core-hit HUD. B build mode, X remove mode, R rotate, 1/2/3 pieces, right-click removes, touch tap places/removes. Red preview where placing is refused; pieces pop in with a sound. Only visible in `RTS`. |
 
@@ -55,13 +62,13 @@ The client runs the game flow; the server owns the arena, the maze pieces, the H
 | `ArenaService` | Builds the `Arena` folder (border walls and prebuilt maze from `ArenaLayout`, dark steel with a pale neon line). Concrete at `FakeVictory`; rebuilt (same folder) on a new round. |
 | `WallService` | Owns `RTSWalls`. `PlacePiece` / `RemovePiece` with rate limit, 30-piece budget, arena bounds, 90° rotations, no overlaps, keep-clear radius around the spawn pad and core, and a flood fill that refuses any Wall/Tower that would cut the route from the spawn to the core. Refusal messages go back on `PlacePiece`. Concrete at `FakeVictory`; cleared on a new round. |
 | `HunterAI` | Black rig with red eyes, walk/idle animations from the server, hidden in ServerStorage outside the horror. Horror: lair 14 studs behind the core, waits 6 s, creeps at 55% speed towards a spot near the player, chases (growl) when it sees the player within 28 studs or is within 14, loses track after 5 s. Speed 11 + 0.8 per past escape (`Wins`), max 15 (player 16). Footstep sounds, kill on touch, back to the lair with 3 s grace after a death. Hunt loops use a generation counter so a retry never runs two. |
-| `RestartService` | Handles `RestartRequest` as described above. |
-| `RecordService` | DataStore `EscapeRecords_v1`: best escape time and escape count per player (attributes `Wins`, `BestEscape`, `LastEscape`, `NewRecord`). Awards badges. DataStores only work in a published place (Studio also needs API access enabled). |
+| `RestartService` | Handles `SelectLevel` (menu only, unlocked levels) and `RestartRequest` (`Retry`, `PlayAgain`, `NextLevel`, `MainMenu`). |
+| `RecordService` | DataStore `EscapeRecords_v1`: best escape time per level, escape count and highest unlocked level per player (attributes `Wins`, `UnlockedLevel`, `BestEscape` for the current level, `LastEscape`, `NewRecord`). Awards badges. DataStores only work in a published place (Studio also needs API access enabled). |
 | `BadgeIds` | Badge ids (`LevelCleared`, `Escaped`, `Flawless`); 0 means not created yet and is skipped. |
 
 ### Shared modules (`src/ReplicatedStorage/`)
 
-`GameState`, `BuildPieces` (pieces, budget, keep-clear radius, footprint helper), `ArenaLayout` (arena size, maze rectangles, spawn and core positions; must match `EntitySpawn` at z = 70 and `EnemyCore` at z = -70), `SoundFx` (every sound id in one place plus `Play`/`Loop` helpers; only Roblox-licensed APM music, Pro Sound Effects and built-in `rbxasset://sounds`), the `CoreHitEvent` BindableEvent and the `Remotes` folder (`PlacePiece`, `RemovePiece`, `PhaseReport`, `RestartRequest`, `RoundReset`).
+`GameState`, `BuildPieces` (pieces, keep-clear radius, footprint helper), `Levels` and `ArenaLayout` (see Levels), `SoundFx` (every sound id in one place plus `Play`/`Loop` helpers; only Roblox-licensed APM music, Pro Sound Effects and built-in `rbxasset://sounds`), the `CoreHitEvent` BindableEvent and the `Remotes` folder (`PlacePiece`, `RemovePiece`, `PhaseReport`, `RestartRequest`, `RoundReset`, `SelectLevel`).
 
 ## Publishing checklist (Vili, on the Creator Dashboard)
 

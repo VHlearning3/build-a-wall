@@ -55,6 +55,14 @@ BuildGrid()
 
 GameState.OnPhase(Phases.FakeVictory, RemoveGrid)
 
+-- A different level has a different floor
+workspace:GetAttributeChangedSignal("Level"):Connect(function()
+	if GameState.Is(Phases.Menu) or GameState.Is(Phases.RTS) then
+		RemoveGrid()
+		BuildGrid()
+	end
+end)
+
 GameState.Resetting:Connect(function(target)
 	if GameState.IsFullReset(target) then
 		BuildGrid()
