@@ -16,7 +16,7 @@ local entities = {}
 local moveSpeed = 20
 local entitySize = 5 -- Kasvatettu koko (oli 3)
 local MENU_MAX_ORBS = 6 -- Just a few orbs behind the main menu
-local maxLifetime = 150 -- Seconds before a stuck orb is destroyed (long levels need time)
+local MAX_ORBS = 40 -- Orbs live until they hit a core; no new ones while this many are flying
 local BOOST_SECONDS = 3 -- Bouncing off a Booster makes an orb fast for this long (a new bounce starts it again)
 local BOOST_SPEED_FACTOR = 2
 local ORB_COLOR = BrickColor.new("Cyan")
@@ -87,8 +87,12 @@ end
 
 task.spawn(function()
 	while true do
-		local menuFull = GameState.Is(Phases.Menu) and #orbsFolder:GetChildren() >= MENU_MAX_ORBS
-		if IsActive() and not menuFull then
+		local limit = if GameState.Is(Phases.Menu) then MENU_MAX_ORBS else MAX_ORBS
+		local flying = 0
+		for _ in entities do
+			flying += 1
+		end
+		if IsActive() and flying < limit then
 			SpawnEntity()
 		end
 		task.wait(2.5)
@@ -101,9 +105,9 @@ RunService.RenderStepped:Connect(function(deltaTime)
 	for i, entityData in pairs(entities) do
 		local orb = entityData.model
 		if orb and orb.Parent then
-			-- Destroy orbs that got outside the arena (should not happen) or are stuck
+			-- Orbs never expire; only one that somehow got outside the arena is removed
 			local outside = math.abs(orb.Position.X) > ArenaLayout.HALF_X + 10 or math.abs(orb.Position.Z) > ArenaLayout.HALF_Z + 10
-			if outside or os.clock() - entityData.born > maxLifetime then
+			if outside then
 				orb:Destroy()
 				entities[i] = nil
 				continue
