@@ -15,6 +15,10 @@ local FAKE_VICTORY_SECONDS = 5
 
 local currentOrbs = 0
 
+-- The build menu HUD reads these
+core:SetAttribute("HitsRequired", ORBS_REQUIRED)
+core:SetAttribute("Hits", 0)
+
 -- Stand on the spawn pad facing the maze and the old core
 local function TeleportToSpawn(character)
 	local root = character:WaitForChild("HumanoidRootPart", 5)
@@ -32,6 +36,7 @@ coreHitEvent.Event:Connect(function()
 	if not GameState.Is(Phases.RTS) then return end
 
 	currentOrbs += 1
+	core:SetAttribute("Hits", currentOrbs)
 
 	-- Flash effect (does not pause this handler)
 	core.BrickColor = BrickColor.new("White")
