@@ -36,8 +36,15 @@ end
 
 local function IsNearKeepClear(position, footprint)
 	local reach = BuildPieces.KEEP_CLEAR_RADIUS + math.max(footprint.X, footprint.Z) / 2
-	for _, spot in {ArenaLayout.SPAWN_POSITION, ArenaLayout.CORE_POSITION} do
+	for _, spot in ArenaLayout.KeepClearSpots() do
 		if Vector3.new(position.X - spot.X, 0, position.Z - spot.Z).Magnitude < reach then
+			return true
+		end
+	end
+	-- Nothing inside the circle a spinning bumper sweeps
+	for _, bumper in ArenaLayout.BUMPERS do
+		local sweep = bumper.length / 2 + 1 + math.max(footprint.X, footprint.Z) / 2
+		if Vector3.new(position.X - bumper.position.X, 0, position.Z - bumper.position.Z).Magnitude < sweep then
 			return true
 		end
 	end
@@ -88,6 +95,11 @@ local function EscapePathExists(extraRect)
 	for _, rect in ArenaLayout.MAZE do
 		Block(rect)
 	end
+	for _, bumper in ArenaLayout.BUMPERS do
+		-- In the horror a bumper stands still along the X axis
+		local p = bumper.position
+		Block({p.X - bumper.length / 2, p.X + bumper.length / 2, p.Z - 1, p.Z + 1})
+	end
 	for _, part in wallsFolder:GetChildren() do
 		if part:IsA("BasePart") and part:GetAttribute("BlocksWalking") then
 			Block(RectOf(part.Position, BuildPieces.Footprint(part.Size, part:GetAttribute("Rotation") or 0)))
@@ -104,7 +116,7 @@ local function EscapePathExists(extraRect)
 	end
 
 	local startColumn, startRow = CellAt(ArenaLayout.SPAWN_POSITION)
-	local goalColumn, goalRow = CellAt(ArenaLayout.CORE_POSITION)
+	local goalColumn, goalRow = CellAt(ArenaLayout.ESCAPE_POSITION)
 	local visited = {[startColumn * 1000 + startRow] = true}
 	local queue = {{startColumn, startRow}}
 	local head = 1
@@ -127,9 +139,12 @@ local function EscapePathExists(extraRect)
 	return false
 end
 
-if not EscapePathExists(nil) then
-	warn("ArenaLayout: the prebuilt maze has no way from the spawn to the core")
+local function CheckLevelRoute()
+	if not EscapePathExists(nil) then
+		warn("Level " .. ArenaLayout.LevelIndex() .. ": the prebuilt maze has no way from the spawn to the escape")
+	end
 end
+CheckLevelRoute()
 
 local function Refuse(player, reason)
 	placePiece:FireClient(player, reason)
@@ -150,7 +165,7 @@ placePiece.OnServerEvent:Connect(function(player, pieceIndex, position, rotation
 	if lastActionTime[player] and now - lastActionTime[player] < MIN_SECONDS_BETWEEN_ACTIONS then return end
 	lastActionTime[player] = now
 
-	if #wallsFolder:GetChildren() >= BuildPieces.BUDGET then
+	if #wallsFolder:GetChildren() >= ArenaLayout.BUDGET then
 		return Refuse(player, "No pieces left. Right-click a piece to remove it.")
 	end
 
@@ -160,7 +175,7 @@ placePiece.OnServerEvent:Connect(function(player, pieceIndex, position, rotation
 	local rect = RectOf(snapped, footprint)
 
 	if not IsInsideArena(rect) then return Refuse(player, "Build inside the arena.") end
-	if IsNearKeepClear(snapped, footprint) then return Refuse(player, "Keep the spawn pad and the core clear.") end
+	if IsNearKeepClear(snapped, footprint) then return Refuse(player, "Keep the spawn pad, the cores and the bumpers clear.") end
 	if Overlaps(snapped, footprint) then return Refuse(player, "Something is already there.") end
 	if piece.blocksWalking and not EscapePathExists(rect) then
 		return Refuse(player, "That would seal the way to the core.")
@@ -187,6 +202,12 @@ removePiece.OnServerEvent:Connect(function(player, part)
 	lastActionTime[player] = now
 
 	part:Destroy()
+end)
+
+-- A new level starts with an empty arena
+workspace:GetAttributeChangedSignal("Level"):Connect(function()
+	wallsFolder:ClearAllChildren()
+	CheckLevelRoute()
 end)
 
 ServerPhase.Changed:Connect(function(phase, _, isReset)

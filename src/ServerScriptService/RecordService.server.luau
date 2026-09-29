@@ -1,12 +1,16 @@
--- Escape records and badges. Saves each player's best escape time and number of escapes;
--- the escape count also makes the Hunter faster next time (HunterAI reads the Wins attribute).
--- Player attributes set here: Wins, BestEscape, LastEscape, NewRecord.
+-- Escape records, level unlocks and badges. Saves each player's best escape time per level, the number
+-- of escapes (HunterAI reads Wins to make the Hunter faster) and the highest unlocked level.
+-- Player attributes set here: Wins, UnlockedLevel, BestEscape (current level), LastEscape, NewRecord.
 local BadgeService = game:GetService("BadgeService")
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local ServerPhase = require(ServerScriptService:WaitForChild("ServerPhase"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local BadgeIds = require(ServerScriptService:WaitForChild("BadgeIds"))
 
 local STORE_NAME = "EscapeRecords_v1"
@@ -25,7 +29,7 @@ do
 	end
 end
 
-local records = {} -- [player] = {best = seconds or nil, wins = number}
+local records = {} -- [player] = {bests = {[levelKey] = seconds}, wins = number, unlocked = number}
 local horrorStart = 0
 local deathsThisRun = 0
 
@@ -44,21 +48,45 @@ local function WithRetries(action)
 	return false, nil
 end
 
+local function LevelKey()
+	return tostring(ArenaLayout.LevelIndex())
+end
+
 local function Publish(player)
 	local record = records[player]
 	if not record then return end
 	player:SetAttribute("Wins", record.wins)
-	player:SetAttribute("BestEscape", record.best)
+	-- Every level is open while testing in Studio (not saved)
+	player:SetAttribute("UnlockedLevel", if RunService:IsStudio() then ArenaLayout.LEVEL_COUNT else record.unlocked)
+	player:SetAttribute("BestEscape", record.bests[LevelKey()])
 end
 
+workspace:GetAttributeChangedSignal("Level"):Connect(function()
+	for player in records do
+		Publish(player)
+	end
+end)
+
 local function Load(player)
-	records[player] = {best = nil, wins = 0}
+	records[player] = {bests = {}, wins = 0, unlocked = 1}
 	if store then
 		local ok, data = WithRetries(function()
 			return store:GetAsync("Player_" .. player.UserId)
 		end)
 		if ok and type(data) == "table" then
-			records[player] = {best = tonumber(data.best), wins = tonumber(data.wins) or 0}
+			local bests = {}
+			if type(data.bests) == "table" then
+				for key, value in data.bests do
+					bests[tostring(key)] = tonumber(value)
+				end
+			elseif tonumber(data.best) then
+				bests["1"] = tonumber(data.best) -- Saved before there were levels
+			end
+			records[player] = {
+				bests = bests,
+				wins = tonumber(data.wins) or 0,
+				unlocked = math.clamp(tonumber(data.unlocked) or 1, 1, ArenaLayout.LEVEL_COUNT),
+			}
 		end
 	end
 	Publish(player)
@@ -70,10 +98,15 @@ local function Save(player)
 	task.spawn(WithRetries, function()
 		store:UpdateAsync("Player_" .. player.UserId, function(old)
 			old = type(old) == "table" and old or {}
-			local oldBest = tonumber(old.best)
+			local bests = type(old.bests) == "table" and old.bests or {}
+			for key, value in record.bests do
+				local oldValue = tonumber(bests[key])
+				bests[key] = if oldValue then math.min(oldValue, value) else value
+			end
 			return {
-				best = if oldBest and record.best then math.min(oldBest, record.best) else (record.best or oldBest),
+				bests = bests,
 				wins = math.max(tonumber(old.wins) or 0, record.wins),
+				unlocked = math.max(tonumber(old.unlocked) or 1, record.unlocked),
 			}
 		end)
 	end)
@@ -127,11 +160,13 @@ ServerPhase.Changed:Connect(function(phase, player)
 		local record = records[player]
 		if not record then return end
 		local escapeTime = math.floor((os.clock() - horrorStart) * 10) / 10
-		local newRecord = record.best == nil or escapeTime < record.best
+		local key = LevelKey()
+		local newRecord = record.bests[key] == nil or escapeTime < record.bests[key]
 		if newRecord then
-			record.best = escapeTime
+			record.bests[key] = escapeTime
 		end
 		record.wins += 1
+		record.unlocked = math.clamp(math.max(record.unlocked, ArenaLayout.LevelIndex() + 1), 1, ArenaLayout.LEVEL_COUNT)
 		player:SetAttribute("LastEscape", escapeTime)
 		player:SetAttribute("NewRecord", newRecord)
 		Publish(player)

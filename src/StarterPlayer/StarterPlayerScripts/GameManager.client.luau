@@ -6,17 +6,14 @@ local RunService = game:GetService("RunService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local Phases = GameState.Phases
 
 local coreHitEvent = ReplicatedStorage:WaitForChild("CoreHitEvent")
 local core = workspace:WaitForChild("EnemyCore")
-local entitySpawn = workspace:WaitForChild("EntitySpawn")
 local player = Players.LocalPlayer
 
-local ORBS_REQUIRED = 5
 local FAKE_VICTORY_SECONDS = 5
-
-local currentOrbs = 0
 
 -- The server follows along (walls, Hunter)
 local phaseReport = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("PhaseReport")
@@ -24,48 +21,83 @@ GameState.Changed:Connect(function(newPhase)
 	phaseReport:FireServer(newPhase)
 end)
 
--- The build menu HUD reads these
-core:SetAttribute("HitsRequired", ORBS_REQUIRED)
-core:SetAttribute("Hits", 0)
+-- Every core of the current level: EnemyCore, plus EnemyCore2... inside the arena on some levels
+local function Cores()
+	local cores = {core}
+	local arena = workspace:FindFirstChild("Arena")
+	if arena then
+		for _, child in arena:GetChildren() do
+			if child:IsA("BasePart") and child.Name:match("^EnemyCore%d") then
+				table.insert(cores, child)
+			end
+		end
+		table.sort(cores, function(a, b)
+			return a.Name < b.Name
+		end)
+	end
+	return cores
+end
 
--- Stand on the spawn pad facing the maze and the old core
+-- Hits per core; the build menu HUD reads the totals from EnemyCore's attributes
+local hitsByCore = {}
+
+local function CountedHits()
+	local total = 0
+	for index, coreData in ArenaLayout.CORES do
+		total += math.min(hitsByCore[index] or 0, coreData.hits)
+	end
+	return total
+end
+
+local function ResetHits()
+	table.clear(hitsByCore)
+	core:SetAttribute("HitsRequired", ArenaLayout.TotalHits())
+	core:SetAttribute("Hits", 0)
+end
+ResetHits()
+workspace:GetAttributeChangedSignal("Level"):Connect(ResetHits)
+
+-- Stand on the spawn pad facing the maze and the escape
 local function TeleportToSpawn(character)
 	local root = character:WaitForChild("HumanoidRootPart", 5)
 	if root then
-		local standAt = entitySpawn.Position + Vector3.new(0, 3, 0)
-		local lookAt = Vector3.new(core.Position.X, standAt.Y, core.Position.Z)
-		root.CFrame = CFrame.lookAt(standAt, lookAt)
+		local standAt = ArenaLayout.SPAWN_POSITION + Vector3.new(0, 3.5, 0)
+		local escape = ArenaLayout.ESCAPE_POSITION
+		root.CFrame = CFrame.lookAt(standAt, Vector3.new(escape.X, standAt.Y, escape.Z))
 	end
 end
 
 -------------------------------------------------------------------------
--- RTS: count orbs that reach the core
+-- RTS: count orbs that reach the cores
 -------------------------------------------------------------------------
-coreHitEvent.Event:Connect(function()
+coreHitEvent.Event:Connect(function(hitCore)
 	if not GameState.Is(Phases.RTS) then return end
+	hitCore = if typeof(hitCore) == "Instance" then hitCore else core
 
-	currentOrbs += 1
-	core:SetAttribute("Hits", currentOrbs)
+	local cores = Cores()
+	local index = table.find(cores, hitCore) or 1
+	hitsByCore[index] = (hitsByCore[index] or 0) + 1
+	core:SetAttribute("Hits", CountedHits())
 
 	-- Flash, shake and boom (does not pause this handler)
-	core.BrickColor = BrickColor.new("White")
+	hitCore.BrickColor = BrickColor.new("White")
 	task.delay(0.1, function()
 		if GameState.Is(Phases.RTS) then
-			core.BrickColor = BrickColor.new("Really red")
+			hitCore.BrickColor = BrickColor.new("Really red")
 		end
 	end)
-	SoundFx.Play("CoreHit", {parent = core, volume = 0.6, maxDistance = 300})
+	SoundFx.Play("CoreHit", {parent = hitCore, volume = 0.6, maxDistance = 300})
 	task.spawn(function()
-		local home = core.CFrame
+		local home = hitCore.CFrame
 		for shake = 1, 8 do
 			local strength = (9 - shake) * 0.12
-			core.CFrame = home * CFrame.new((math.random() - 0.5) * strength, (math.random() - 0.5) * strength, (math.random() - 0.5) * strength)
+			hitCore.CFrame = home * CFrame.new((math.random() - 0.5) * strength, (math.random() - 0.5) * strength, (math.random() - 0.5) * strength)
 			task.wait(0.03)
 		end
-		core.CFrame = home
+		hitCore.CFrame = home
 	end)
 
-	if currentOrbs >= ORBS_REQUIRED then
+	if CountedHits() >= ArenaLayout.TotalHits() then
 		GameState.Set(Phases.FakeVictory)
 	end
 end)
@@ -74,12 +106,14 @@ end)
 -- FAKE VICTORY: short pause before the horror starts
 -------------------------------------------------------------------------
 GameState.OnPhase(Phases.FakeVictory, function()
-	-- The core is "destroyed": hide it and its glow
-	core.Transparency = 1
-	core.CanCollide = false
-	local coreGlow = core:FindFirstChild("CoreGlow")
-	if coreGlow then
-		coreGlow.Enabled = false
+	-- The cores are "destroyed": hide them and their glow
+	for _, eachCore in Cores() do
+		eachCore.Transparency = 1
+		eachCore.CanCollide = false
+		local coreGlow = eachCore:FindFirstChild("CoreGlow")
+		if coreGlow then
+			coreGlow.Enabled = false
+		end
 	end
 
 	local character = player.Character or player.CharacterAdded:Wait()
@@ -100,7 +134,7 @@ local ESCAPE_SIZE = 16
 local ESCAPE_REACH = ESCAPE_SIZE / 2 -- Standing this close to the centre (flat distance) counts as escaped
 local ESCAPE_COLOR = Color3.fromRGB(60, 255, 90)
 
-local escapeCenter = Vector3.new(core.Position.X, 0, core.Position.Z)
+local escapeCenter = Vector3.zero -- Set from the level when the horror starts
 local victoryConnection = nil
 
 local function BuildEscapeZone()
@@ -163,6 +197,9 @@ local function StopVictoryCheck()
 end
 
 GameState.OnPhase(Phases.Horror, function()
+	local escape = ArenaLayout.ESCAPE_POSITION
+	escapeCenter = Vector3.new(escape.X, 0, escape.Z)
+
 	-- A retry keeps the zone that is already there
 	if not workspace:FindFirstChild("EscapeZone") then
 		BuildEscapeZone()
@@ -238,7 +275,6 @@ end)
 -------------------------------------------------------------------------
 -- RESET: try again (back to the horror) or a whole new round
 -------------------------------------------------------------------------
-local coreHome = core.CFrame
 
 -- The server decides when a new round starts (after a menu button) and tells us where to begin
 ReplicatedStorage.Remotes:WaitForChild("RoundReset").OnClientEvent:Connect(function(target)
@@ -252,15 +288,16 @@ GameState.Resetting:Connect(function(target)
 	player:SetAttribute("LivesLeft", LIVES)
 
 	if GameState.IsFullReset(target) then
-		currentOrbs = 0
-		core:SetAttribute("Hits", 0)
-		core.CFrame = coreHome
-		core.Transparency = 0
-		core.CanCollide = true
-		core.BrickColor = BrickColor.new("Really red")
-		local coreGlow = core:FindFirstChild("CoreGlow")
-		if coreGlow then
-			coreGlow.Enabled = true
+		ResetHits()
+		core.CFrame = CFrame.new(ArenaLayout.CORES[1].position + Vector3.new(0, ArenaLayout.CORE_HEIGHT, 0))
+		for _, eachCore in Cores() do
+			eachCore.Transparency = 0
+			eachCore.CanCollide = true
+			eachCore.BrickColor = BrickColor.new("Really red")
+			local coreGlow = eachCore:FindFirstChild("CoreGlow")
+			if coreGlow then
+				coreGlow.Enabled = true
+			end
 		end
 		local zone = workspace:FindFirstChild("EscapeZone")
 		if zone then

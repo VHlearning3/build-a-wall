@@ -7,18 +7,17 @@ local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ServerPhase = require(ServerScriptService:WaitForChild("ServerPhase"))
+local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
 local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 
 local hunter = workspace:WaitForChild("Hunter")
 local humanoid = hunter:WaitForChild("Humanoid")
 local rootPart = hunter:WaitForChild("HumanoidRootPart")
-local core = workspace:WaitForChild("EnemyCore")
 
 local BASE_SPEED = 11 -- The player walks at 16, so running away works
 local SPEED_PER_WIN = 0.8 -- Each escape makes the next Hunter a little faster
 local MAX_SPEED = 15
 local STALK_SPEED_FACTOR = 0.55 -- Slow creeping while it has not found the player yet
-local LAIR_WAIT_SECONDS = 6 -- Quiet start: the player hears nothing at first
 local CHASE_RANGE = 28 -- Starts chasing when it sees the player this close
 local CLOSE_RANGE = 14 -- ...or when the player is this close, seen or not
 local LOSE_TRACK_SECONDS = 5 -- Goes back to stalking after not seeing the player this long
@@ -26,11 +25,10 @@ local REPATH_SECONDS = 0.5
 local STEP_SECONDS = 0.1
 local WAYPOINT_REACHED = 3
 local RESPAWN_GRACE_SECONDS = 3
-local SPAWN_DISTANCE_BEHIND_CORE = 14
+local LAIR_DISTANCE_BEHIND_ESCAPE = 14
 
 local EYE_COLOR = Color3.fromRGB(255, 0, 0)
 
-local coreStart = core.Position -- The core changes shape later, remember where it started
 local hunting = false
 local huntGeneration = 0 -- Bumped every hunt so loops from an earlier round stop
 local graceUntil = 0
@@ -133,32 +131,47 @@ local function SetUpAnimations()
 end
 
 -------------------------------------------------------------------------
--- PLACEMENT: a free spot behind the old core, away from the spawn pad
+-- PLACEMENT: the lair is a free spot just beyond the escape zone, seen from the spawn pad
 -------------------------------------------------------------------------
+local function LairCentre()
+	local escape = ArenaLayout.ESCAPE_POSITION
+	local away = Vector3.new(escape.X - ArenaLayout.SPAWN_POSITION.X, 0, escape.Z - ArenaLayout.SPAWN_POSITION.Z)
+	away = if away.Magnitude > 0 then away.Unit else Vector3.new(0, 0, -1)
+	local lair = escape + away * LAIR_DISTANCE_BEHIND_ESCAPE
+	local margin = 4
+	return Vector3.new(
+		math.clamp(lair.X, -ArenaLayout.HALF_X + margin, ArenaLayout.HALF_X - margin),
+		3,
+		math.clamp(lair.Z, -ArenaLayout.HALF_Z + margin, ArenaLayout.HALF_Z - margin)
+	)
+end
+
 local function FindSpawnSpot()
+	local centre = LairCentre()
 	local overlap = OverlapParams.new()
 	overlap.FilterType = Enum.RaycastFilterType.Exclude
 	overlap.FilterDescendantsInstances = {hunter, workspace:FindFirstChild("Baseplate")}
 
 	for ring = 0, 6 do
 		for angle = 0, 315, 45 do
-			local offset = Vector3.new(0, 0, -SPAWN_DISTANCE_BEHIND_CORE)
+			local offset = Vector3.zero
 			if ring > 0 then
-				offset += CFrame.Angles(0, math.rad(angle), 0):VectorToWorldSpace(Vector3.new(0, 0, ring * 6))
+				offset = CFrame.Angles(0, math.rad(angle), 0):VectorToWorldSpace(Vector3.new(0, 0, ring * 6))
 			end
-			local spot = Vector3.new(coreStart.X, 3, coreStart.Z) + offset
+			local spot = centre + offset
 			local blocked = workspace:GetPartBoundsInBox(CFrame.new(spot), Vector3.new(4, 5, 4), overlap)
 			if #blocked == 0 then
 				return spot
 			end
 		end
 	end
-	return Vector3.new(coreStart.X, 3, coreStart.Z - SPAWN_DISTANCE_BEHIND_CORE)
+	return centre
 end
 
 local function PlaceAtSpawn()
 	local spot = FindSpawnSpot()
-	hunter:PivotTo(CFrame.lookAt(spot, Vector3.new(coreStart.X, spot.Y, coreStart.Z + 100)))
+	local spawnPad = ArenaLayout.SPAWN_POSITION
+	hunter:PivotTo(CFrame.lookAt(spot, Vector3.new(spawnPad.X, spot.Y, spawnPad.Z)))
 	humanoid:MoveTo(spot)
 end
 
@@ -204,7 +217,7 @@ local function HuntLoop(generation)
 	local waypoints = {}
 	local waypointIndex = 0
 	local lastPathTime = 0
-	local chasing = false
+	local chasing = not ArenaLayout.HUNTER_STALKS -- Some levels skip the creeping
 	local lastSeen = 0
 	local stalkGoal = nil
 	local nextGrowl = 0
@@ -251,7 +264,7 @@ local function HuntLoop(generation)
 				chasing = true
 				Growl()
 				nextGrowl = os.clock() + 8 + math.random() * 6
-			elseif chasing and not canSee and distance > CHASE_RANGE * 1.5 and os.clock() - lastSeen > LOSE_TRACK_SECONDS then
+			elseif chasing and ArenaLayout.HUNTER_STALKS and not canSee and distance > CHASE_RANGE * 1.5 and os.clock() - lastSeen > LOSE_TRACK_SECONDS then
 				chasing = false
 				stalkGoal = nil
 			end
@@ -338,7 +351,7 @@ ServerPhase.Changed:Connect(function(phase)
 		hunter.Parent = workspace
 		PlaceAtSpawn()
 		rootPart:SetNetworkOwner(nil) -- The server moves the Hunter
-		graceUntil = os.clock() + LAIR_WAIT_SECONDS
+		graceUntil = os.clock() + ArenaLayout.HUNTER_LAIR_WAIT
 		hunting = true
 		print("The Hunter is loose...")
 		task.spawn(HuntLoop, huntGeneration)

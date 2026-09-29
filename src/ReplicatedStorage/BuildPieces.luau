@@ -1,7 +1,6 @@
 -- Build pieces and placement rules shared by the client build menu and the server that places them
 local BuildPieces = {
 	GRID_SIZE = 2, -- Pieces snap to a 2-stud grid
-	BUDGET = 30, -- Pieces the player can have at once; removing one gives it back
 	KEEP_CLEAR_RADIUS = 7, -- No pieces this close to the spawn pad or the core
 
 	Pieces = {

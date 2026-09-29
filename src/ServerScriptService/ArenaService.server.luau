@@ -1,4 +1,5 @@
--- Builds the walled arena and the prebuilt maze from ArenaLayout, and turns them to concrete with the player's walls
+-- Builds the current level from ArenaLayout (border, maze, spinning bumpers, extra cores), moves the
+-- spawn pad and the core into place, and turns it all to concrete with the player's walls at the twist
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -40,8 +41,49 @@ local function MakeWall(name, rect, parent)
 	table.insert(trims, trim)
 end
 
--- Builds a fresh arena (also at the start of every new round). The folder itself stays,
--- because client scripts keep a reference to it.
+local entitySpawn = workspace:WaitForChild("EntitySpawn")
+local core = workspace:WaitForChild("EnemyCore")
+local spawnRotation = entitySpawn.CFrame - entitySpawn.Position
+
+local function MakeBumper(index, bumper, parent)
+	local bar = Instance.new("Part")
+	bar.Name = "Bumper" .. index
+	bar.Anchored = true
+	bar.Material = Enum.Material.Neon
+	bar.Color = Color3.fromRGB(255, 220, 60)
+	bar.Size = Vector3.new(bumper.length, ArenaLayout.WALL_HEIGHT, 2)
+	bar.Position = bumper.position + Vector3.new(0, ArenaLayout.WALL_HEIGHT / 2, 0)
+	bar:SetAttribute("SpinSpeed", bumper.speed) -- The client spins it while building
+	bar.Parent = parent
+
+	local hub = Instance.new("Part")
+	hub.Name = "Hub"
+	hub.Shape = Enum.PartType.Cylinder
+	hub.Anchored = true
+	hub.CanQuery = false
+	hub.Material = Enum.Material.Neon
+	hub.Color = Color3.fromRGB(255, 255, 255)
+	hub.Size = Vector3.new(ArenaLayout.WALL_HEIGHT + 0.4, 3, 3)
+	hub.CFrame = CFrame.new(bar.Position) * CFrame.Angles(0, 0, math.rad(90))
+	hub.Parent = parent
+end
+
+-- The first core is the EnemyCore in Workspace; extra cores are copies of it inside the arena
+local function PlaceCores(parent)
+	local cores = ArenaLayout.CORES
+	core.Position = cores[1].position + Vector3.new(0, ArenaLayout.CORE_HEIGHT, 0)
+	core.Transparency = 0
+	core.CanCollide = true
+	for index = 2, #cores do
+		local extra = core:Clone()
+		extra.Name = "EnemyCore" .. index
+		extra.Position = cores[index].position + Vector3.new(0, ArenaLayout.CORE_HEIGHT, 0)
+		extra.Parent = parent
+	end
+end
+
+-- Builds a fresh arena for the current level (also at the start of every new round).
+-- The folder itself stays, because client scripts keep a reference to it.
 local function BuildArena()
 	table.clear(trims)
 	if arena then
@@ -50,6 +92,8 @@ local function BuildArena()
 		arena = Instance.new("Folder")
 		arena.Name = "Arena"
 	end
+
+	entitySpawn.CFrame = CFrame.new(ArenaLayout.SPAWN_POSITION + Vector3.new(0, 0.5, 0)) * spawnRotation
 
 	local border = Instance.new("Folder")
 	border.Name = "Border"
@@ -65,10 +109,20 @@ local function BuildArena()
 		MakeWall("MazeWall" .. index, rect, maze)
 	end
 
+	local bumpers = Instance.new("Folder")
+	bumpers.Name = "Bumpers"
+	bumpers.Parent = arena
+	for index, bumper in ArenaLayout.BUMPERS do
+		MakeBumper(index, bumper, bumpers)
+	end
+
+	PlaceCores(arena)
 	arena.Parent = workspace
 end
 
+workspace:SetAttribute("Level", ArenaLayout.LevelIndex())
 BuildArena()
+workspace:GetAttributeChangedSignal("Level"):Connect(BuildArena)
 
 ServerPhase.Changed:Connect(function(phase, _, isReset)
 	if isReset and (phase == "Menu" or phase == "RTS") then
@@ -83,6 +137,13 @@ ServerPhase.Changed:Connect(function(phase, _, isReset)
 		if part:IsA("BasePart") then
 			part.Material = Enum.Material.Concrete
 			part.Color = Color3.fromRGB(88, 88, 90)
+		end
+	end
+	-- The cores are "destroyed": gone for the Hunter's pathfinding too
+	for _, part in {core, table.unpack(arena:GetChildren())} do
+		if part:IsA("BasePart") and part.Name:match("^EnemyCore") then
+			part.Transparency = 1
+			part.CanCollide = false
 		end
 	end
 end)
