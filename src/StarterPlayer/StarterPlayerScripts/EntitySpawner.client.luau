@@ -16,6 +16,10 @@ local moveSpeed = 20
 local entitySize = 5 -- Kasvatettu koko (oli 3)
 local maxDistance = 250 -- Orbs farther than this from the spawn are destroyed
 local maxLifetime = 90 -- Seconds before a stuck orb is destroyed
+local BOOST_SECONDS = 3 -- Bouncing off a Booster makes an orb fast for this long (a new bounce starts it again)
+local BOOST_SPEED_FACTOR = 2
+local ORB_COLOR = BrickColor.new("Cyan")
+local BOOSTED_COLOR = BrickColor.new("Hot pink")
 
 local orbsFolder = Instance.new("Folder")
 orbsFolder.Name = "EnergyOrbs"
@@ -61,7 +65,7 @@ local function SpawnEntity()
 	orb.Name = "EnergyOrb"
 	orb.Shape = Enum.PartType.Ball
 	orb.Size = Vector3.new(entitySize, entitySize, entitySize)
-	orb.BrickColor = BrickColor.new("Cyan")
+	orb.BrickColor = ORB_COLOR
 	orb.Material = Enum.Material.Neon
 	orb.Position = spawnPoint.Position + Vector3.new(0, entitySize/2, 0)
 
@@ -104,7 +108,12 @@ RunService.RenderStepped:Connect(function(deltaTime)
 			end
 
 			local dir = entityData.dir
-			local stepDistance = moveSpeed * deltaTime
+			local boosted = entityData.boostUntil and os.clock() < entityData.boostUntil
+			if not boosted and entityData.boostUntil then
+				entityData.boostUntil = nil
+				orb.BrickColor = ORB_COLOR
+			end
+			local stepDistance = moveSpeed * (if boosted then BOOST_SPEED_FACTOR else 1) * deltaTime
 			local result = workspace:Raycast(orb.Position, dir * (stepDistance + (entitySize/2)), raycastParams)
 
 			if result then
@@ -118,7 +127,13 @@ RunService.RenderStepped:Connect(function(deltaTime)
 					local reflectDir = dir - (2 * dir:Dot(result.Normal) * result.Normal)
 					entityData.dir = Vector3.new(reflectDir.X, 0, reflectDir.Z).Unit
 					Spark(result.Position)
-					SoundFx.Play("OrbBounce", {parent = orb, volume = 0.35, speed = 0.9 + math.random() * 0.4})
+					if result.Instance.Name == "Booster" then
+						entityData.boostUntil = os.clock() + BOOST_SECONDS
+						orb.BrickColor = BOOSTED_COLOR
+						SoundFx.Play("OrbBounce", {parent = orb, volume = 0.5, speed = 1.6})
+					else
+						SoundFx.Play("OrbBounce", {parent = orb, volume = 0.35, speed = 0.9 + math.random() * 0.4})
+					end
 				end
 			else
 				-- Liikutaan eteenpäin

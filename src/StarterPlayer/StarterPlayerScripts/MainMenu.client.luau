@@ -212,13 +212,13 @@ FitToScreen(card)
 Label(card, "HOW TO PLAY", CUTE_FONT, ORANGE, UDim2.fromScale(0.8, 0.13), UDim2.fromScale(0.5, 0.12))
 local steps = {
 	"1.  Blue orbs fly out of the S pad and bounce off walls.",
-	"2.  Build walls, towers and bumps to steer them.",
+	"2.  Build walls and towers to steer them. Boosters speed them up!",
 	"3.  Hit the red ENEMY CORE 5 times to clear the level!",
 	"B build   R rotate   Right-click remove   Wheel zoom",
 }
 for index, text in steps do
 	local line = Label(card, text, BODY_FONT, if index == 4 then Color3.fromRGB(160, 200, 230) else Color3.fromRGB(235, 245, 255),
-		UDim2.fromScale(0.86, 0.085), UDim2.fromScale(0.5, 0.26 + index * 0.12))
+		UDim2.fromScale(0.86, 0.08), UDim2.fromScale(0.5, 0.23 + index * 0.11))
 	line.TextXAlignment = Enum.TextXAlignment.Left
 	local sameSize = Instance.new("UITextSizeConstraint")
 	sameSize.MaxTextSize = 20 -- All steps the same size on big screens

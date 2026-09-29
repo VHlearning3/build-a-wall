@@ -184,6 +184,7 @@ placePiece.OnServerEvent:Connect(function(player, pieceIndex, position, rotation
 	local part = Instance.new("Part")
 	part.Name = piece.name
 	part.Size = piece.size
+	part.Shape = piece.shape or Enum.PartType.Block
 	part.Anchored = true
 	part.BrickColor = piece.color
 	part.Material = Enum.Material.Neon

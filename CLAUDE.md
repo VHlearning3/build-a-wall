@@ -53,7 +53,7 @@ The client runs the game flow; the server owns the arena, the maze pieces, the H
 | `EndScreens` | Lives counter in `Horror`; victory and game over screens with escape time, best time, deaths, new-record line and the two buttons. |
 | `BumperSpin` | Spins the bumper bars locally while building; snaps them back to the server position at the fake victory. |
 | `AudioDirector` | Music and ambience per phase (see `SoundFx`): building music, hard cut + glitch + siren at the twist, drone music and a heartbeat that speeds up as the Hunter gets close, growl at game over. |
-| `RTSGui/BuilderScript` (`src/StarterGui/RTSGui/`) | Neon build bar (BUILD toggle, Wall/Tower/Floor Obstacle, ROTATE, REMOVE, piece budget, hints, refusal message) and the top core-hit HUD. B build mode, X remove mode, R rotate, 1/2/3 pieces, right-click removes, touch tap places/removes. Red preview where placing is refused; pieces pop in with a sound. Only visible in `RTS`. |
+| `RTSGui/BuilderScript` (`src/StarterGui/RTSGui/`) | Neon build bar (BUILD toggle, Wall/Tower/Booster, ROTATE, REMOVE, piece budget, hints, refusal message) and the top core-hit HUD. B build mode, X remove mode, R rotate, 1/2/3 pieces, right-click removes, touch tap places/removes. Red preview where placing is refused; pieces pop in with a sound. Only visible in `RTS`. |
 
 ### Server scripts (`src/ServerScriptService/`)
 

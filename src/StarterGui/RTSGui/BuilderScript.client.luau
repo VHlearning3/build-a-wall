@@ -171,11 +171,12 @@ for index, option in buildOptions do
 	local swatch = Instance.new("Frame")
 	swatch.AnchorPoint = Vector2.new(0.5, 0.5)
 	swatch.Position = UDim2.new(0.5, 0, 0, 44)
-	swatch.Size = UDim2.fromOffset(math.max(8, 56 * footprint.X / longest), math.max(8, 44 * footprint.Y / longest))
+	swatch.Size = if option.shape == Enum.PartType.Ball then UDim2.fromOffset(40, 40)
+		else UDim2.fromOffset(math.max(8, 56 * footprint.X / longest), math.max(8, 44 * footprint.Y / longest))
 	swatch.BackgroundColor3 = option.color.Color
 	swatch.BorderSizePixel = 0
 	swatch.Parent = slot
-	Round(swatch, 3)
+	Round(swatch, if option.shape == Enum.PartType.Ball then 100 else 3)
 	Stroke(swatch, Color3.new(1, 1, 1), 1, 0.5)
 
 	Label(slot, string.upper(option.name), BODY_FONT, Color3.fromRGB(225, 240, 255), UDim2.new(1, -12, 0, 16), UDim2.new(0, 6, 1, -26))
@@ -468,6 +469,7 @@ local function UpdatePreview()
 	end
 
 	local currentOption = buildOptions[selectedOptionIndex]
+	previewPart.Shape = currentOption.shape or Enum.PartType.Block
 	previewPart.Size = currentOption.size
 	previewPart.BrickColor = currentOption.color
 
