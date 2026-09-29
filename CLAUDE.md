@@ -64,7 +64,7 @@ The client runs the game flow; the server owns the arena, the maze pieces, the H
 | `HunterAI` | Clones the Workspace `Hunter` rig (kept in ServerStorage as `HunterTemplate`) for each role in the level's `HUNTERS`: `chaser` (below) and `guard` (patrols 18 studs around the escape, chases players who come within reach, gives up beyond 45 studs from the escape). Models are named `Hunter`, `Hunter2`...; clients use `ArenaLayout.NearestHunter`. Black rig with red eyes, walk/idle animations from the server, hidden in ServerStorage outside the horror. Horror: lair 14 studs behind the core, waits 6 s, creeps at 55% speed towards a spot near the player, chases (growl) when it sees the player within 28 studs or is within 14, loses track after 5 s. Speed 11 + 0.8 per past escape (`Wins`), max 15 (player 16). Footstep sounds, kill on touch, back to the lair with 3 s grace after a death. Hunt loops use a generation counter so a retry never runs two. |
 | `RestartService` | Handles `SelectLevel` (menu only, unlocked levels) and `RestartRequest` (`Retry`, `PlayAgain`, `NextLevel`, `MainMenu`). |
 | `RecordService` | DataStore `EscapeRecords_v1`: best escape time per level, escape count and highest unlocked level per player (attributes `Wins`, `UnlockedLevel`, `BestEscape` for the current level, `LastEscape`, `NewRecord`). Awards badges. DataStores only work in a published place (Studio also needs API access enabled). |
-| `BadgeIds` | Badge ids (`LevelCleared`, `Escaped`, `Flawless`); 0 means not created yet and is skipped. |
+| `BadgeIds` | Badge ids: `Levels[n]` (awarded for escaping level n) and `Flawless` (escaped without dying); 0 means not created yet and is skipped. |
 
 ### Shared modules (`src/ReplicatedStorage/`)
 

@@ -112,9 +112,8 @@ local function Save(player)
 	end)
 end
 
-local function Award(player, badgeName)
-	local badgeId = BadgeIds[badgeName]
-	if not badgeId or badgeId == 0 then return end
+local function Award(player, badgeId)
+	if typeof(badgeId) ~= "number" or badgeId == 0 then return end
 	task.spawn(function()
 		local ok, has = pcall(BadgeService.UserHasBadgeAsync, BadgeService, player.UserId, badgeId)
 		if ok and not has then
@@ -150,9 +149,7 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 ServerPhase.Changed:Connect(function(phase, player)
-	if phase == "FakeVictory" and player then
-		Award(player, "LevelCleared")
-	elseif phase == "Horror" then
+	if phase == "Horror" then
 		-- Also restarts the clock when the player retries the escape
 		horrorStart = os.clock()
 		deathsThisRun = 0
@@ -172,9 +169,10 @@ ServerPhase.Changed:Connect(function(phase, player)
 		Publish(player)
 		Save(player)
 
-		Award(player, "Escaped")
+		-- Roblox itself shows the "badge awarded" pop-up to the player
+		Award(player, BadgeIds.Levels[ArenaLayout.LevelIndex()])
 		if deathsThisRun == 0 then
-			Award(player, "Flawless")
+			Award(player, BadgeIds.Flawless)
 		end
 	end
 end)
