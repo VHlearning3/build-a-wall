@@ -16,13 +16,6 @@ SoundFx.Ids = {
 	Heartbeat = "rbxassetid://139481207162657",
 	Footstep = "rbxassetid://87061775498714",
 	-- Game feel (built-in Roblox sounds)
-	OrbBounce = { -- Roblox pinball bumper bells; one is picked at random each bounce
-		"rbxassetid://16480570986",
-		"rbxassetid://16480570779",
-		"rbxassetid://16480570609",
-		"rbxassetid://16480570385",
-	},
-	BoosterBounce = "rbxassetid://16480574637", -- Roblox pinball bumper, full
 	PiecePlaced = "rbxasset://sounds/snap.wav",
 	PieceRemoved = "rbxasset://sounds/switch.wav",
 	Refused = "rbxasset://sounds/button.wav",

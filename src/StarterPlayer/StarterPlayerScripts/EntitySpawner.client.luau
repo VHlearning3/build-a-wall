@@ -6,7 +6,6 @@ local TweenService = game:GetService("TweenService")
 
 local GameState = require(ReplicatedStorage:WaitForChild("GameState"))
 local ArenaLayout = require(ReplicatedStorage:WaitForChild("ArenaLayout"))
-local SoundFx = require(ReplicatedStorage:WaitForChild("SoundFx"))
 local Phases = GameState.Phases
 
 local spawnPoint = workspace:WaitForChild("EntitySpawn")
@@ -133,12 +132,10 @@ RunService.RenderStepped:Connect(function(deltaTime)
 					local reflectDir = dir - (2 * dir:Dot(result.Normal) * result.Normal)
 					entityData.dir = Vector3.new(reflectDir.X, 0, reflectDir.Z).Unit
 					Spark(result.Position)
+					-- Bounces are silent (Vili's choice)
 					if result.Instance.Name == "Booster" then
 						entityData.boostUntil = os.clock() + BOOST_SECONDS
 						orb.BrickColor = BOOSTED_COLOR
-						SoundFx.Play("BoosterBounce", {parent = orb, volume = 0.6})
-					else
-						SoundFx.Play("OrbBounce", {parent = orb, volume = 0.45, speed = 0.95 + math.random() * 0.1})
 					end
 				end
 			else
