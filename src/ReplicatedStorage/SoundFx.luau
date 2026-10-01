@@ -16,7 +16,7 @@ SoundFx.Ids = {
 	Heartbeat = "rbxassetid://139481207162657",
 	Footstep = "rbxassetid://87061775498714",
 	-- Game feel (built-in Roblox sounds)
-	PiecePlaced = "rbxassetid://16480580213", -- Roblox pinball 8-bit blip: short arcade sound
+	PiecePlaced = "rbxassetid://9114383107", -- Pro Sound Effects bubble burst: a light, playful "blub"
 	PieceRemoved = "rbxasset://sounds/switch.wav",
 	Refused = "rbxasset://sounds/button.wav",
 	CoreHit = "rbxasset://sounds/impact_explosion_03.mp3",
