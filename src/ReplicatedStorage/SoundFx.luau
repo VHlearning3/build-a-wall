@@ -16,7 +16,7 @@ SoundFx.Ids = {
 	Heartbeat = "rbxassetid://139481207162657",
 	Footstep = "rbxassetid://87061775498714",
 	-- Game feel (built-in Roblox sounds)
-	PiecePlaced = "rbxasset://sounds/snap.wav",
+	PiecePlaced = "rbxassetid://16480568821", -- Roblox pinball soft click: light and pleasant
 	PieceRemoved = "rbxasset://sounds/switch.wav",
 	Refused = "rbxasset://sounds/button.wav",
 	CoreHit = "rbxasset://sounds/impact_explosion_03.mp3",
