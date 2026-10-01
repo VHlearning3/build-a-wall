@@ -136,9 +136,9 @@ RunService.RenderStepped:Connect(function(deltaTime)
 					if result.Instance.Name == "Booster" then
 						entityData.boostUntil = os.clock() + BOOST_SECONDS
 						orb.BrickColor = BOOSTED_COLOR
-						SoundFx.Play("OrbBounce", {parent = orb, volume = 0.5, speed = 1.6})
+						SoundFx.Play("BoosterBounce", {parent = orb, volume = 0.6})
 					else
-						SoundFx.Play("OrbBounce", {parent = orb, volume = 0.35, speed = 0.9 + math.random() * 0.4})
+						SoundFx.Play("OrbBounce", {parent = orb, volume = 0.45, speed = 0.95 + math.random() * 0.1})
 					end
 				end
 			else

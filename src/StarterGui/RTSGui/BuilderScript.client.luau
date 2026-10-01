@@ -189,7 +189,7 @@ Divider(10)
 -- Rotate and remove (also the touch-friendly way to do R and right-click)
 local rotateButton = Button(bar, "RotateButton", 11, 90)
 Stroke(rotateButton, ACCENT, 1.5, 0.5)
-Label(rotateButton, "90°", TITLE_FONT, ACCENT, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 16))
+Label(rotateButton, BuildPieces.ROTATION_STEP .. "°", TITLE_FONT, ACCENT, UDim2.new(1, -16, 0, 40), UDim2.fromOffset(8, 16))
 Label(rotateButton, "ROTATE [R]", HINT_FONT, Color3.fromRGB(150, 190, 220), UDim2.new(1, -12, 0, 14), UDim2.new(0, 6, 1, -26))
 
 local removeButton = Button(bar, "RemoveButton", 12, 90)
@@ -331,7 +331,7 @@ local function SelectOption(index)
 end
 
 local function Rotate()
-	currentRotation = (currentRotation + 90) % 360
+	currentRotation = (currentRotation + BuildPieces.ROTATION_STEP) % 360
 end
 
 toggle.MouseButton1Click:Connect(function()
@@ -404,6 +404,15 @@ local function SnapToGrid(pos)
 end
 
 -- Same checks as the server except the escape path, which only the server runs
+-- Probe shaped like the piece for an exact overlap test (works for turned pieces too)
+local probe = Instance.new("Part")
+probe.Name = "OverlapProbe"
+probe.Anchored = true
+probe.CanCollide = false
+probe.CanQuery = false
+probe.CanTouch = false
+probe.Transparency = 1
+
 local function IsBlocked(position, footprint)
 	if position.X - footprint.X / 2 < -ArenaLayout.HALF_X or position.X + footprint.X / 2 > ArenaLayout.HALF_X
 		or position.Z - footprint.Z / 2 < -ArenaLayout.HALF_Z or position.Z + footprint.Z / 2 > ArenaLayout.HALF_Z then
@@ -424,7 +433,12 @@ local function IsBlocked(position, footprint)
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = {wallsFolder, arena}
-	local hits = workspace:GetPartBoundsInBox(CFrame.new(position.X, 1, position.Z), Vector3.new(footprint.X - 0.2, 1, footprint.Z - 0.2), params)
+	local size = buildOptions[selectedOptionIndex].size
+	probe.Size = Vector3.new(size.X - 0.2, 1, size.Z - 0.2) -- Touching edges is fine
+	probe.CFrame = CFrame.new(position.X, 1, position.Z) * CFrame.Angles(0, math.rad(currentRotation), 0)
+	probe.Parent = workspace
+	local hits = workspace:GetPartsInPart(probe, params)
+	probe.Parent = nil
 	for _, hit in hits do
 		if hit ~= previewPart and hit.CanCollide then
 			return true

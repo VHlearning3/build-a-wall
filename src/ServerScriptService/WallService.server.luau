@@ -56,12 +56,24 @@ local function IsInsideArena(rect)
 		and rect[3] >= -ArenaLayout.HALF_Z and rect[4] <= ArenaLayout.HALF_Z
 end
 
-local function Overlaps(position, footprint)
+-- Exact overlap test with a probe shaped like the piece (works for turned pieces too)
+local probe = Instance.new("Part")
+probe.Name = "OverlapProbe"
+probe.Anchored = true
+probe.CanCollide = false
+probe.CanQuery = false
+probe.CanTouch = false
+probe.Transparency = 1
+
+local function Overlaps(cframe, size)
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = {wallsFolder, workspace:WaitForChild("Arena")}
-	local shrunk = Vector3.new(footprint.X - 0.2, 1, footprint.Z - 0.2) -- Touching edges is fine
-	local hits = workspace:GetPartBoundsInBox(CFrame.new(position.X, 1, position.Z), shrunk, params)
+	probe.Size = Vector3.new(size.X - 0.2, 1, size.Z - 0.2) -- Touching edges is fine
+	probe.CFrame = CFrame.new(cframe.Position.X, 1, cframe.Position.Z) * cframe.Rotation
+	probe.Parent = workspace
+	local hits = workspace:GetPartsInPart(probe, params)
+	probe.Parent = nil
 	for _, hit in hits do
 		if hit.CanCollide then
 			return true
@@ -71,7 +83,8 @@ local function Overlaps(position, footprint)
 end
 
 -- Flood fill over a 2-stud grid: can a character still walk from the spawn to the core?
-local function EscapePathExists(extraRect)
+-- extraPiece is an optional {cframe, size} for the piece about to be placed
+local function EscapePathExists(extraPiece)
 	local columns = math.floor(ArenaLayout.HALF_X * 2 / CELL)
 	local rows = math.floor(ArenaLayout.HALF_Z * 2 / CELL)
 	local blocked = {}
@@ -100,13 +113,30 @@ local function EscapePathExists(extraRect)
 		local p = bumper.position
 		Block({p.X - bumper.length / 2, p.X + bumper.length / 2, p.Z - 1, p.Z + 1})
 	end
-	for _, part in wallsFolder:GetChildren() do
-		if part:IsA("BasePart") and part:GetAttribute("BlocksWalking") then
-			Block(RectOf(part.Position, BuildPieces.Footprint(part.Size, part:GetAttribute("Rotation") or 0)))
+	-- Pieces may be turned, so test each cell against the turned shape
+	local function BlockPiece(cframe, size)
+		local footprint = BuildPieces.Footprint(size, math.deg(select(2, cframe:ToOrientation())))
+		local xMin, xMax = cframe.Position.X - footprint.X / 2 - CLEARANCE, cframe.Position.X + footprint.X / 2 + CLEARANCE
+		local zMin, zMax = cframe.Position.Z - footprint.Z / 2 - CLEARANCE, cframe.Position.Z + footprint.Z / 2 + CLEARANCE
+		for column = 1, columns do
+			local x = -ArenaLayout.HALF_X + (column - 0.5) * CELL
+			if x > xMin and x < xMax then
+				for row = 1, rows do
+					local z = -ArenaLayout.HALF_Z + (row - 0.5) * CELL
+					if z > zMin and z < zMax and BuildPieces.Covers(cframe, size, Vector3.new(x, 0, z), CLEARANCE) then
+						blocked[column * 1000 + row] = true
+					end
+				end
+			end
 		end
 	end
-	if extraRect then
-		Block(extraRect)
+	for _, part in wallsFolder:GetChildren() do
+		if part:IsA("BasePart") and part:GetAttribute("BlocksWalking") then
+			BlockPiece(part.CFrame, part.Size)
+		end
+	end
+	if extraPiece then
+		BlockPiece(extraPiece.cframe, extraPiece.size)
 	end
 
 	local function CellAt(position)
@@ -158,7 +188,7 @@ placePiece.OnServerEvent:Connect(function(player, pieceIndex, position, rotation
 	local piece = BuildPieces.Pieces[pieceIndex]
 	if not piece then return end
 	if position.X ~= position.X or position.Z ~= position.Z then return end -- NaN
-	if rotation % 90 ~= 0 then return end
+	if rotation % BuildPieces.ROTATION_STEP ~= 0 then return end
 	rotation %= 360
 
 	local now = os.clock()
@@ -173,11 +203,12 @@ placePiece.OnServerEvent:Connect(function(player, pieceIndex, position, rotation
 	local floorY = baseplate.Position.Y + baseplate.Size.Y / 2
 	local snapped = Vector3.new(Snap(position.X), floorY + piece.size.Y / 2, Snap(position.Z))
 	local rect = RectOf(snapped, footprint)
+	local cframe = CFrame.new(snapped) * CFrame.Angles(0, math.rad(rotation), 0)
 
 	if not IsInsideArena(rect) then return Refuse(player, "Build inside the arena.") end
 	if IsNearKeepClear(snapped, footprint) then return Refuse(player, "Keep the spawn pad, the cores and the bumpers clear.") end
-	if Overlaps(snapped, footprint) then return Refuse(player, "Something is already there.") end
-	if piece.blocksWalking and not EscapePathExists(rect) then
+	if Overlaps(cframe, piece.size) then return Refuse(player, "Something is already there.") end
+	if piece.blocksWalking and not EscapePathExists({cframe = cframe, size = piece.size}) then
 		return Refuse(player, "That would seal the way to the core.")
 	end
 
@@ -188,7 +219,7 @@ placePiece.OnServerEvent:Connect(function(player, pieceIndex, position, rotation
 	part.Anchored = true
 	part.BrickColor = piece.color
 	part.Material = Enum.Material.Neon
-	part.CFrame = CFrame.new(snapped) * CFrame.Angles(0, math.rad(rotation), 0)
+	part.CFrame = cframe
 	part:SetAttribute("BlocksWalking", piece.blocksWalking)
 	part:SetAttribute("Rotation", rotation)
 	part.Parent = wallsFolder
