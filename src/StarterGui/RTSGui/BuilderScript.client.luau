@@ -527,7 +527,7 @@ end
 -- New pieces pop into place
 wallsFolder.ChildAdded:Connect(function(part)
 	if not part:IsA("BasePart") or part == previewPart or part.Name == "GhostPreview" then return end
-	SoundFx.Play("PiecePlaced", {volume = 0.5, speed = 0.9 + math.random() * 0.2})
+	SoundFx.Play("PiecePlaced", {volume = 0.3})
 	local fullSize = part.Size
 	part.Size = fullSize * Vector3.new(0.6, 0.2, 0.6)
 	TweenService:Create(part, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = fullSize}):Play()
